@@ -1,0 +1,4 @@
+export GEMINI_REGION=us-central1
+export GEMINI_PROJECT_ID=<my application>
+export GEMINI_VERSION=gemini-pro
+export GEMINI_URL='https://${GEMINI_REGION}-aiplatform.googleapis.com/v1/projects/${GEMINI_PROJECT_ID}/locations/${GEMINI_REGION}/publishers/google/models/${GEMINI_VERSION}:streamGenerateContent'

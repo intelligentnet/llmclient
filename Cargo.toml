@@ -1,0 +1,23 @@
+[package]
+name = "llmclient"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chris Dipple <chris@intelligent-net.co.uk>"]
+license = "MIT OR Apache-2.0"
+description = "Rust LLM client"
+homepage = "https://github.com/intelligentnet/llmclient"
+repository = "https://github.com/intelligentnet/llmclient"
+keywords = ["api", "async", "web", "google"]
+categories = ["web-programming::http-client", "api-bindings"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json", "gzip"] }
+tokio = { version = "1", features = ["full"] }
+serde = "^1.0.124"
+serde_json = "^1.0"
+serde_derive = "^1"
+base64 = "0.21"
+stemplate = "0.1"
+crossterm = "0.27"
