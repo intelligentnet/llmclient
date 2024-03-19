@@ -28,6 +28,12 @@ TODO
 - Fix bugs that will inevitably come up as this interface matures
 - Keep up with Google
 
+Added
+-----
+
+-- 'System' Data, to set context more like OpenAI and Anthropic
+
+
 Please read the `API documentation` https://docs.rs/llmclient/
 
 An example dialogue:
@@ -66,8 +72,8 @@ Ah, if I were Australian, how would you answer the previous question?
 
 
 Your question:
-Correct. I am English, The Wizard of Oz is an American book. We are culturally closer to Australians. Knowing that, how would you answer the original question?
-> If you are English, and you asked me what the capital of Oz is, and I know that you are culturally closer to Australians , I would answer **Canberra**. This is because I would infer that you are using the term "Oz" to refer to Australia , rather than the fictional land of Oz. 
+Correct. I am Scottish, The Wizard of Oz is an American book. We are culturally closer to Australians. Knowing that, how would you answer the original question?
+> If you are Scotish, and you asked me what the capital of Oz is, and I know that you are culturally closer to Australians , I would answer **Canberra**. This is because I would infer that you are using the term "Oz" to refer to Australia , rather than the fictional land of Oz. 
 
 > Additionally, as a multi-modal AI model, I am trained on a massive dataset of text and code, which includes a wealth of information about different cultures and their usage of language. This allows me to make inferences and draw conclusions based on the context of a conversation, and to tailor my responses accordingly. 
 
@@ -81,3 +87,6 @@ Mars does not have a capital city, as it is not inhabited by humans and does not
 Your question:
 ^D
 
+-------------------------------------------------
+
+Try another dialogue with system context. An example is available in system.txt.orig (copy to system.txt), edit at will.

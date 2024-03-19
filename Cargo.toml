@@ -1,12 +1,13 @@
 [package]
 name = "llmclient"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Chris Dipple <chris@intelligent-net.co.uk>"]
 license = "MIT OR Apache-2.0"
 description = "Rust LLM client"
 homepage = "https://github.com/intelligentnet/llmclient"
 repository = "https://github.com/intelligentnet/llmclient"
+documentation = "https://docs.rs/llmclient"
 keywords = ["api", "async", "web", "google"]
 categories = ["web-programming::http-client", "api-bindings"]
 

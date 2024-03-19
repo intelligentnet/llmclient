@@ -13,13 +13,20 @@ async fn main() {
 
     let mut prompts: Vec<String> = Vec::new();
 
+    // Are 'system' context instructions available?
+    let system_data = std::fs::read_to_string("system.txt");
+    if let Ok(ref system) = system_data {
+        prompts.push(system.into());
+        prompts.push("Understood".into());
+    }
+
     loop {
         let prompt = get_user_response("Your question: ");
 
         if prompt.is_empty() || prompt.to_lowercase() == "quit" || prompt.to_lowercase() == "exit" {
             break;
         } else if prompt.to_lowercase() == "new" || prompt.to_lowercase() == "clear" {
-            prompts = Vec::new();
+            prompts.truncate(if system_data.is_ok() { 2 } else { 0 });
 
             continue;
         } else if prompt.to_lowercase() == "show" || prompt.to_lowercase() == "history" {
@@ -50,13 +57,15 @@ async fn main() {
 
 async fn gemini(content: Vec<Content>) -> String{
     match call_gemini(content).await {
-        Ok((text, finish_reason, citations)) => {
+        Ok((text, finish_reason, citations, metadata)) => {
             if !finish_reason.is_empty() && finish_reason != "STOP" {
                 println!("Finish Reason: {}", finish_reason);
             }
             if !citations.is_empty() {
                 println!("{}", citations);
             }
+
+            println!("{}", metadata);
 
             text
         },

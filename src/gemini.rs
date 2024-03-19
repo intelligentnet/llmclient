@@ -25,6 +25,7 @@ impl GeminiCompletion {
     }
 }
 
+/// This is the primary structure for loading a call. See implementation.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Content {
@@ -33,23 +34,23 @@ pub struct Content {
 }
 
 impl Content {
-    pub fn many(role: &str, parts: Vec<Part>) -> Self {
-        Content { role: role.into(), parts }
-    }
-
+    /// Supply single role and single part text
     pub fn one(role: &str, part: Part) -> Self {
         Content { role: role.into(), parts: vec![part]  }
     }
 
-    pub fn one_offset(role: &str, part: Part, offset: Part) -> Self {
-        Content { role: role.into(), parts: vec![part, offset] }
-    }
-
+    /// Supply single role and single text string for Part
     pub fn text(role: &str, text: &str) -> Self {
         Content { role: role.into(), parts: vec![Part::text(text)] }
     }
 
-    pub fn many_text(role: &str, parts: &[&str]) -> Self {
+    /// Supply single role and multi-part text
+    pub fn many(role: &str, parts: Vec<Part>) -> Self {
+        Content { role: role.into(), parts }
+    }
+
+    /// Supply single role with multi-string for iparts with single content
+    pub fn many_text(role: &str, parts: &[String]) -> Self {
         let parts: Vec<Part> = parts.iter()
             .map(|p| Part::text(p))
             .collect();
@@ -57,6 +58,32 @@ impl Content {
         Content { role: role.into(), parts }
     }
 
+    /// Supply simple, 'system' content
+    pub fn system(system_prompt: &str) -> Vec<Self> {
+        vec![Content::text("user", system_prompt), Content::text("model", "Understood")]
+    }
+
+    /// Supply multi-parts and single 'system' content
+    pub fn multi_part_system(system_prompts: &[String]) -> Vec<Self> {
+        vec![Content::many_text("user", system_prompts), Content::text("model", "Understood")]
+    }
+
+    /// Supply multi-context 'system' content
+    pub fn systems(system_prompts: &[String]) -> Vec<Self> {
+        let n = system_prompts.len() * 2;
+
+        (0..n)
+            .map(|i| {
+                if i % 2 == 0 {
+                    Content::text("user", &system_prompts[i / 2])
+                } else {
+                    Content::text("model", "Understood")
+                }
+            })
+            .collect()
+    }
+
+    /// Supply multi-String content with user and model alternating
     pub fn dialogue(prompts: &[String]) -> Vec<Self> {
         prompts.iter()
             .enumerate()
@@ -67,8 +94,19 @@ impl Content {
             })
             .collect()
     }
+
+    /// Supply inline file data
+    pub fn to_inline(role: &str, mime_type: &str, content: &[u8]) -> Vec<Self> {
+        vec![Content { role: role.into(), parts: vec![Part::inline_data(mime_type, content)] }]
+    }
+
+    /// Supply file data for previously supplied file
+    pub fn file(role: &str, mime_type: &str, file: &str) -> Vec<Self> {
+        vec![Content { role: role.into(), parts: vec![Part::file_data(mime_type, file)] }]
+    }
 }
 
+/// Parts to make up the content 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum Part {
@@ -82,18 +120,30 @@ pub enum Part {
 }
 
 impl Part {
+    /// Create text Part
     pub fn text(text: &str) -> Self {
         Part::Text(text.to_string())
     }
 
+    /// Create inline data Part from data
     pub fn inline_data(mime_type: &str, data: &[u8]) -> Self {
         Part::InlineData { mime_type: mime_type.into(), data: BASE64_STANDARD.encode(data) }
     }
 
+    /// Create inline data Part from file
+    pub fn inline_file(mime_type: &str, file: &str) -> Self {
+        match std::fs::read_to_string(file) {
+            Ok(data) => Part::InlineData { mime_type: mime_type.into(), data: BASE64_STANDARD.encode(data.as_bytes()) },
+            Err(e) => Part::InlineData { mime_type: mime_type.into(), data: BASE64_STANDARD.encode(format!("{file} not found: {e}").as_bytes()) }
+        }
+    }
+
+    /// Create Part referencing previously uploaded file
     pub fn file_data(mime_type: &str, file_url: &str) -> Self {
         Part::FileData { mime_type: mime_type.into(), file_url: file_url.into() }
     }
 
+    /// Create Offset Part for inline or uploaded files
     pub fn offset(start_secs: usize, start_nanos: usize, end_secs: usize, end_nanos: usize) -> Self {
         Part::VideoMetadata { start_offset: Offset { seconds: start_secs, nanos: start_nanos },
             end_offset: Offset { seconds: end_secs, nanos: end_nanos }
@@ -108,14 +158,17 @@ pub struct Offset {
     pub nanos: usize
 }
 
+/// Safety setting with helper functions
 #[derive(Debug, Serialize, Clone)]
 pub struct SafetySettings {
     pub category: String,
     pub threshold: String,
 }
 
+// Safety Settings, simple setting functions
 impl SafetySettings {
-    pub fn no_block() -> Vec<SafetySettings> {
+    /// Don't Block ever i.e let everything through (Google may not like this!)
+    pub fn no_block() -> Vec<Self> {
         vec![
             SafetySettings { category: HarmCategory::HarmCategoryHarassment.to_string(),
                 threshold: HarmBlockThreshold::BlockNone.to_string() },
@@ -128,7 +181,8 @@ impl SafetySettings {
         ]
     }
 
-    pub fn low_block() -> Vec<SafetySettings> {
+    /// Low threshold for blocking calls i.e let most stuff through
+    pub fn low_block() -> Vec<Self> {
         vec![
             SafetySettings { category: HarmCategory::HarmCategoryHarassment.to_string(),
                 threshold: HarmBlockThreshold::BlockLowAndAbove.to_string() },
@@ -141,7 +195,8 @@ impl SafetySettings {
         ]
     }
 
-    pub fn med_block() -> Vec<SafetySettings> {
+    /// Medium threshold for blocking calls i.e. block moderately 'bad' stuff
+    pub fn med_block() -> Vec<Self> {
         vec![
             SafetySettings { category: HarmCategory::HarmCategoryHarassment.to_string(),
                 threshold: HarmBlockThreshold::BlockMedAndAbove.to_string() },
@@ -154,7 +209,8 @@ impl SafetySettings {
         ]
     }
 
-    pub fn high_block() -> Vec<SafetySettings> {
+    /// High threshold for blocking calls i.e. block only 'bad' stuff
+    pub fn high_block() -> Vec<Self> {
         vec![
             SafetySettings { category: HarmCategory::HarmCategoryHarassment.to_string(),
                 threshold: HarmBlockThreshold::BlockOnlyHigh.to_string() },
@@ -167,7 +223,8 @@ impl SafetySettings {
         ]
     }
 
-    pub fn blocks(blocks: Vec<(HarmCategory, HarmBlockThreshold)>) -> Vec<SafetySettings> {
+    /// Custom thresholds for 4 types of blocks
+    pub fn blocks(blocks: Vec<(HarmCategory, HarmBlockThreshold)>) -> Vec<Self> {
         blocks.iter()
             .map(|(c, t)| SafetySettings { category: c.to_string(), threshold: t.to_string() })
             .collect()
@@ -254,7 +311,7 @@ impl FunctionDeclarations {
 pub struct GeminiResponse {
     pub candidates: Vec<Candidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage_metadata: Option<Metadata>, // TODO: Fix as not parsing!
+    pub usage_metadata: Option<Metadata>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -308,7 +365,7 @@ impl std::fmt::Display for Citation {
                 writeln!(f, "    License: {license}")?;
             }
             if let Some(publication_date) = &self.publication_date {
-                writeln!(f, "    Publication Date: {publication_date:?}")?;
+                writeln!(f, "    Publication Date: {publication_date}")?;
             }
         }
         
@@ -323,12 +380,32 @@ pub struct PublicationDate {
     pub day: usize,
 }
 
+impl std::fmt::Display for PublicationDate {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}/{}/{}", self.year, self.month, self.day)?;
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
     pub prompt_token_count: usize,
     pub candidates_token_count: usize,
     pub total_token_count: usize,
+}
+
+impl std::fmt::Display for Metadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "Tokens: {} + {} = {}", self.prompt_token_count, self.candidates_token_count, self.total_token_count)
+    }
+}
+
+impl Metadata {
+    fn new() -> Self {
+        Metadata { prompt_token_count: 0, candidates_token_count: 0, total_token_count: 0 }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -342,8 +419,13 @@ pub struct ResponsePart {
     pub text: String,
 }
 
-// Call Large Language Model (i.e. Google Gemini)
-pub async fn call_gemini(contents: Vec<Content>) -> Result<(String, String, String), Box<dyn std::error::Error + Send>> {
+/// Call Large Language Model (i.e. Google Gemini) with defaults
+pub async fn call_gemini(contents: Vec<Content>) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+    call_gemini_all(contents, SafetySettings::high_block(), GenerationConfig::new(Some(0.2), None, None, 1, Some(8192), None)).await
+}
+
+/// Call Large Language Model (i.e. Google Gemini) with all parameters supplied
+pub async fn call_gemini_all(contents: Vec<Content>, safety: Vec<SafetySettings>, config: GenerationConfig) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
     let url: String = Template::new("${GEMINI_URL}").render_env();
     let client = get_client().await?;
 
@@ -351,8 +433,8 @@ pub async fn call_gemini(contents: Vec<Content>) -> Result<(String, String, Stri
     let gemini_completion: GeminiCompletion = GeminiCompletion {
         contents, 
         tools: None,
-        safety_settings: SafetySettings::high_block(),
-        generation_config: GenerationConfig::new(Some(0.2), None, None, 1, Some(8192), None)
+        safety_settings: safety,
+        generation_config: config
     };
 
     // Extract Response
@@ -391,13 +473,24 @@ pub async fn call_gemini(contents: Vec<Content>) -> Result<(String, String, Stri
             }
         })
         .collect::<String>()).collect();
+    let metadata: Metadata = res.iter()
+        .fold(Metadata::new(), |mut s, g| {
+            if let Some(m) = &g.usage_metadata {
+                s.prompt_token_count += m.prompt_token_count;
+                s.candidates_token_count += m.candidates_token_count;
+                s.total_token_count += m.total_token_count;
+            }
+
+            s
+        });
+        
 
     // Remove any comments
     let text = text.lines()
         .filter(|l| !l.starts_with("```"))
         .fold(String::new(), |s, l| s + l + "\n");
 
-    Ok((text, finish_reason, citations))
+    Ok((text, finish_reason, citations, metadata))
 }
 
 async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
@@ -438,34 +531,21 @@ async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
     Ok(client)
 }
 
-pub fn texts(role: &str, texts: &[&str]) -> Vec<Content> {
-    let parts: Vec<Part> = texts.iter().map(|t| Part::text(t)).collect();
-
-    vec![Content { role: role.into(), parts }]
-}
-
-pub fn text_to_inline(role: &str, mime_type: &str, content: &[u8]) -> Vec<Content> {
-    vec![Content { role: role.into(), parts: vec![Part::inline_data(mime_type, content)] }]
-}
-
-pub fn text_to_file(role: &str, mime_type: &str, file: &str) -> Vec<Content> {
-    vec![Content { role: role.into(), parts: vec![Part::file_data(mime_type, file)] }]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     async fn gemini(content: Vec<Content>) {
         match call_gemini(content).await {
-            Ok((text, finish_reason, citations)) => {
+            Ok((text, finish_reason, citations, metadata)) => {
                 println!("{}", text);
                 if !finish_reason.is_empty() {
                     println!("Finish Reason: {}", finish_reason);
                 }
                 if !citations.is_empty() {
-                    println!("{}", citations);
+                    println!("Citations: {}", citations);
                 }
+                println!("Metadata: {}", metadata);
                 assert!(true);
             },
             Err(e) => { println!("{e}"); assert!(false) },
