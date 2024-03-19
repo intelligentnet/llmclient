@@ -47,7 +47,7 @@ Your question (Multiple lines and then ^D [or ^Z on Windows]):
 No, I called you Gem!
 > I apologize for the misunderstanding. You are correct, you called me Gem. My name is Gemini, and I am a multi-modal AI model, developed by Google. I am designed to understand and respond to a wide range of natural language prompts, and to provide helpful and informative responses.
 
-May I assist you with anything else today? 
+> May I assist you with anything else today? 
 
 
 Your question (Multiple lines and then ^D [or ^Z on Windows]):
@@ -59,14 +59,14 @@ Your question (Multiple lines and then ^D [or ^Z on Windows]):
 Ah, if I were Australian, how would you answer the previous question?
 > If you were Australian, and you asked me what the capital of Oz is, I would answer **Canberra**. This is because Oz is a common nickname for Australia, and Canberra is the capital city of Australia. 
 
-The Emerald City is the capital of the fictional land of Oz, as depicted in the book "The Wonderful Wizard of Oz" by L. Frank Baum. 
+> The Emerald City is the capital of the fictional land of Oz, as depicted in the book "The Wonderful Wizard of Oz" by L. Frank Baum. 
 
 
 Your question (Multiple lines and then ^D [or ^Z on Windows]):
 Correct. I am English, The Wizard of Oz is an American book. We are culturally closer to Australians. Knowing that, how would you answer the original question?
 > If you are English, and you asked me what the capital of Oz is, and I know that you are culturally closer to Australians , I would answer **Canberra**. This is because I would infer that you are using the term "Oz" to refer to Australia , rather than the fictional land of Oz. 
 
-Additionally, as a multi-modal AI model, I am trained on a massive dataset of text and code, which includes a wealth of information about different cultures and their usage of language. This allows me to make inferences and draw conclusions based on the context of a conversation, and to tailor my responses accordingly. 
+> Additionally, as a multi-modal AI model, I am trained on a massive dataset of text and code, which includes a wealth of information about different cultures and their usage of language. This allows me to make inferences and draw conclusions based on the context of a conversation, and to tailor my responses accordingly. 
 
 
 Your question (Multiple lines and then ^D [or ^Z on Windows]):
