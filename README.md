@@ -17,7 +17,7 @@ For you to do to get started :
 -	Install gcload locally
 -	Edit the env file and run: . ./env in shell
 
-Testing this is tricky and there are many variations of possible responses (assuming Google have not changed their interface). Tests will pass providing a call is successfully made to Gemini and does not return a Error. There may be a number of internal reasons for it to fail (finish not 'STOP', safety resons etc. To show more context call test with the --nocapture flag.
+Testing this is tricky and there are many variations of possible responses (assuming Google have not changed their interface). Tests will pass providing a call is successfully made to Gemini and does not return a Error. There may be a number of internal reasons for it to fail (finish not 'STOP', safety resons etc). To show more context call test with the --nocapture flag.
 
 TODO
 ----
@@ -31,7 +31,7 @@ TODO
 Added
 -----
 
--- 'System' Data, to set context more like OpenAI and Anthropic
+- 'System' Data, to set context more like OpenAI and Anthropic
 
 
 Please read the `API documentation` https://docs.rs/llmclient/
