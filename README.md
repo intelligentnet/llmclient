@@ -3,6 +3,12 @@ A LLM Rust Client for Google Gemini
 
 Google is the first in what will hopefully be a series of interfaces to various online LLMs. OpenAI, Anthropic and Mistral all work for basic functionality for text but need some polishing. There is a high degree of volatility and only so many hours in a day to create and maintain these interfaces. 
 
+NOTE:
+-----
+
+New version required because Google broke the interface. New version of gcloud created, so please upgrade. Safety Ratings are not new returned with the response so must be optional.
+
+
 The Goal
 --------
 
@@ -32,6 +38,11 @@ Added
 -----
 
 - 'System' Data, to set context more like OpenAI and Anthropic
+
+IMPORTANT NOTES
+---------------
+
+Version 0.1.1 -> 0.1.2 breaking change. The content vector is now pass by reference to minimise copying
 
 
 Please read the `API documentation` https://docs.rs/llmclient/

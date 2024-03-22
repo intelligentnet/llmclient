@@ -1,10 +1,10 @@
 [package]
 name = "llmclient"
-version = "0.1.1"
+version = "0.1.3"
 edition = "2021"
 authors = ["Chris Dipple <chris@intelligent-net.co.uk>"]
 license = "MIT OR Apache-2.0"
-description = "Rust LLM client"
+description = "Rust LLM client - Gemini, GPT"
 homepage = "https://github.com/intelligentnet/llmclient"
 repository = "https://github.com/intelligentnet/llmclient"
 documentation = "https://docs.rs/llmclient"

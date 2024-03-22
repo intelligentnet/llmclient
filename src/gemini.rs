@@ -11,6 +11,7 @@ use base64::Engine;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+// Container for all data to be sent
 pub struct GeminiCompletion {
     pub contents: Vec<Content>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -20,7 +21,8 @@ pub struct GeminiCompletion {
 }
 
 impl GeminiCompletion {
-    pub fn contents(contents: Vec<Content>, safety_settings: Vec<SafetySettings>, generation_config: GenerationConfig) -> Self {
+    // Crete new Completeion object
+    pub fn new(contents: Vec<Content>, safety_settings: Vec<SafetySettings>, generation_config: GenerationConfig) -> Self {
         GeminiCompletion { contents, tools: None, safety_settings, generation_config }
     }
 }
@@ -320,7 +322,8 @@ pub struct Candidate {
     pub content: ResponseContent,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
-    pub safety_ratings: Vec<OutSafety>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub safety_ratings: Option<Vec<OutSafety>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub citation_metadata: Option<CitationMetadata>
 }
@@ -421,28 +424,41 @@ pub struct ResponsePart {
 
 /// Call Large Language Model (i.e. Google Gemini) with defaults
 pub async fn call_gemini(contents: Vec<Content>) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
-    call_gemini_all(contents, SafetySettings::high_block(), GenerationConfig::new(Some(0.2), None, None, 1, Some(8192), None)).await
+    call_gemini_system(None, contents).await
+}
+
+/// Call Large Language Model (i.e. Google Gemini) with 'system context' and defaults
+pub async fn call_gemini_system(system: Option<&str>, contents: Vec<Content>) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+    call_gemini_system_all(system, contents, SafetySettings::high_block(), GenerationConfig::new(Some(0.2), None, None, 1, Some(8192), None)).await
 }
 
 /// Call Large Language Model (i.e. Google Gemini) with all parameters supplied
 pub async fn call_gemini_all(contents: Vec<Content>, safety: Vec<SafetySettings>, config: GenerationConfig) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
-    let url: String = Template::new("${GEMINI_URL}").render_env();
-    let client = get_client().await?;
+    call_gemini_system_all(None, contents, safety, config).await
+}
+
+/// Call Large Language Model (i.e. Google Gemini) with all parameters supplied including system context
+pub async fn call_gemini_system_all(system: Option<&str>, contents: Vec<Content>, safety: Vec<SafetySettings>, config: GenerationConfig) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+    let contents = add_system_content(system, contents);
 
     // Create chat completion
-    let gemini_completion: GeminiCompletion = GeminiCompletion {
-        contents, 
-        tools: None,
-        safety_settings: safety,
-        generation_config: config
-    };
+    let gemini_completion = GeminiCompletion::new(contents, safety, config);
+
+    call_gemini_completion(&gemini_completion).await
+}
+
+// Pass a complete completion object 
+pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+    let url: String = Template::new("${GEMINI_URL}").render_env();
+    let client = get_client().await?;
 
     // Extract Response
     let res = client
         .post(url)
-        .json(&gemini_completion)
+        .json(gemini_completion)
         .send()
         .await;
+
     let res: Vec<GeminiResponse> = res
         .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?
         .json()
@@ -483,7 +499,6 @@ pub async fn call_gemini_all(contents: Vec<Content>, safety: Vec<SafetySettings>
 
             s
         });
-        
 
     // Remove any comments
     let text = text.lines()
@@ -491,6 +506,15 @@ pub async fn call_gemini_all(contents: Vec<Content>, safety: Vec<SafetySettings>
         .fold(String::new(), |s, l| s + l + "\n");
 
     Ok((text, finish_reason, citations, metadata))
+}
+
+/// Add 'system' content to other content
+pub fn add_system_content(system: Option<&str>, contents: Vec<Content>) -> Vec<Content> {
+    if let Some(system) = system {
+        [Content::system(system), contents].concat()
+    } else {
+        contents
+    }
 }
 
 async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
