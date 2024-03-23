@@ -5,6 +5,7 @@ use serde_derive::{Deserialize, Serialize};
 use stemplate::Template;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use crate::common::{LlmType, LlmReturn};
 
 // Input structures
 // Chat
@@ -313,7 +314,7 @@ impl FunctionDeclarations {
 pub struct GeminiResponse {
     pub candidates: Vec<Candidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub usage_metadata: Option<Metadata>,
+    pub usage_metadata: Option<Usage>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -328,11 +329,22 @@ pub struct Candidate {
     pub citation_metadata: Option<CitationMetadata>
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 pub struct OutSafety {
     pub category: String,
     pub probability: String,
     pub blocked: Option<bool>
+}
+
+impl std::fmt::Debug for OutSafety {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        if self.blocked.is_some() {
+            writeln!(f, "Safety Rating: {}: {} -> {:?}",
+                self.category, self.probability, self.blocked)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -353,7 +365,7 @@ pub struct Citation {
 impl std::fmt::Display for Citation {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         if let Some(uri) = &self.uri {
-            writeln!(f, "Citation:")?;
+            //writeln!(f, "Citation:")?;
             match BASE64_STANDARD.decode(uri) {
                 Ok(uri) => writeln!(f, "    Uri: {:?}", String::from_utf8(uri)),
                 Err(_) => Ok(writeln!(f, "    Uri: {}", uri)?)
@@ -393,21 +405,21 @@ impl std::fmt::Display for PublicationDate {
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Metadata {
+pub struct Usage {
     pub prompt_token_count: usize,
     pub candidates_token_count: usize,
     pub total_token_count: usize,
 }
 
-impl std::fmt::Display for Metadata {
+impl std::fmt::Display for Usage {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Tokens: {} + {} = {}", self.prompt_token_count, self.candidates_token_count, self.total_token_count)
     }
 }
 
-impl Metadata {
+impl Usage {
     fn new() -> Self {
-        Metadata { prompt_token_count: 0, candidates_token_count: 0, total_token_count: 0 }
+        Usage { prompt_token_count: 0, candidates_token_count: 0, total_token_count: 0 }
     }
 }
 
@@ -423,22 +435,22 @@ pub struct ResponsePart {
 }
 
 /// Call Large Language Model (i.e. Google Gemini) with defaults
-pub async fn call_gemini(contents: Vec<Content>) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+pub async fn call_gemini(contents: Vec<Content>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_gemini_system(None, contents).await
 }
 
 /// Call Large Language Model (i.e. Google Gemini) with 'system context' and defaults
-pub async fn call_gemini_system(system: Option<&str>, contents: Vec<Content>) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+pub async fn call_gemini_system(system: Option<&str>, contents: Vec<Content>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_gemini_system_all(system, contents, SafetySettings::high_block(), GenerationConfig::new(Some(0.2), None, None, 1, Some(8192), None)).await
 }
 
 /// Call Large Language Model (i.e. Google Gemini) with all parameters supplied
-pub async fn call_gemini_all(contents: Vec<Content>, safety: Vec<SafetySettings>, config: GenerationConfig) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+pub async fn call_gemini_all(contents: Vec<Content>, safety: Vec<SafetySettings>, config: GenerationConfig) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_gemini_system_all(None, contents, safety, config).await
 }
 
 /// Call Large Language Model (i.e. Google Gemini) with all parameters supplied including system context
-pub async fn call_gemini_system_all(system: Option<&str>, contents: Vec<Content>, safety: Vec<SafetySettings>, config: GenerationConfig) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+pub async fn call_gemini_system_all(system: Option<&str>, contents: Vec<Content>, safety: Vec<SafetySettings>, config: GenerationConfig) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let contents = add_system_content(system, contents);
 
     // Create chat completion
@@ -448,7 +460,8 @@ pub async fn call_gemini_system_all(system: Option<&str>, contents: Vec<Content>
 }
 
 // Pass a complete completion object 
-pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Result<(String, String, String, Metadata), Box<dyn std::error::Error + Send>> {
+pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let start = std::time::Instant::now();
     let url: String = Template::new("${GEMINI_URL}").render_env();
     let client = get_client().await?;
 
@@ -480,32 +493,46 @@ pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Res
             if let Some(finish) = &c.finish_reason { finish.clone() } else { "".into() }
         })
         .collect::<String>()).collect();
+    let safety_ratings: Vec<String> = res.iter()
+        .map(|gr| gr.candidates.iter()
+            .map(|c| if c.safety_ratings.is_some() {
+                format!("{:?}", c.safety_ratings)
+            } else {
+                "".into()
+            })
+            .collect::<String>())
+        .filter(|s| !s.is_empty() && s != "Some([, , , ])") // NOT elegant!
+        .collect();
     let citations: String = res.iter()
         .map(|gr| gr.candidates.iter().map(|c| {
             if let Some(citation_metadata) = &c.citation_metadata {
-                citation_metadata.citations.iter().map(|c| c.to_string()).collect::<String>()
+                citation_metadata.citations.iter()
+                    .map(|c| c.to_string()).collect::<String>()
             } else {
                 "".into()
             }
         })
         .collect::<String>()).collect();
-    let metadata: Metadata = res.iter()
-        .fold(Metadata::new(), |mut s, g| {
+    let usage: String = res.iter()
+        .fold(Usage::new(), |mut s: Usage, g| {
             if let Some(m) = &g.usage_metadata {
                 s.prompt_token_count += m.prompt_token_count;
                 s.candidates_token_count += m.candidates_token_count;
                 s.total_token_count += m.total_token_count;
             }
-
             s
-        });
+        }).to_string();
+    let timing: String = format!("{:?}", start.elapsed());
 
     // Remove any comments
     let text = text.lines()
         .filter(|l| !l.starts_with("```"))
         .fold(String::new(), |s, l| s + l + "\n");
 
-    Ok((text, finish_reason, citations, metadata))
+    Ok(LlmReturn::new(LlmType::GEMINI, text, finish_reason, usage, timing,
+                      if citations.is_empty() { None } else { Some(citations) },
+                      if safety_ratings.is_empty() { None } else { Some(safety_ratings) }
+                      ))
 }
 
 /// Add 'system' content to other content
@@ -561,42 +588,32 @@ mod tests {
 
     async fn gemini(content: Vec<Content>) {
         match call_gemini(content).await {
-            Ok((text, finish_reason, citations, metadata)) => {
-                println!("{}", text);
-                if !finish_reason.is_empty() {
-                    println!("Finish Reason: {}", finish_reason);
-                }
-                if !citations.is_empty() {
-                    println!("Citations: {}", citations);
-                }
-                println!("Metadata: {}", metadata);
-                assert!(true);
-            },
+            Ok(ret) => { println!("{ret}"); assert!(true) },
             Err(e) => { println!("{e}"); assert!(false) },
         }
     }
 
     #[tokio::test]
     async fn test_call_gemini_basic() {
-        let messages: Vec<Content> = 
+        let messages =
             vec![Content::text("user", "What is the meaining of life?")];
         gemini(messages).await;
     }
     #[tokio::test]
     async fn test_call_gemini_citation() {
-        let messages: Vec<Content> = 
+        let messages =
             vec![Content::text("user", "Give citations for the General theory of Relativity.")];
         gemini(messages).await;
     }
     #[tokio::test]
     async fn test_call_gemini_poem() {
-        let messages: Vec<Content> = 
+        let messages =
             vec![Content::text("user", "Write a creative poem about the interplay of artificial intelligence and the human spirit and provide citations")];
         gemini(messages).await;
     }
     #[tokio::test]
     async fn test_call_gemini_logic() {
-        let messages: Vec<Content> = 
+        let messages =
             vec![Content::text("user", "How many brains does an octopus have, when they have been injured and lost a leg?")];
         gemini(messages).await;
     }

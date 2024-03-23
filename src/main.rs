@@ -4,9 +4,20 @@ use crossterm::{
 };
 use std::io::{stdin, stdout};
 use llmclient::gemini::{call_gemini, Content};
+use llmclient::gpt::{call_gpt, GptMessage};
 
 #[tokio::main]
 async fn main() {
+    let mut llm = 0;
+    let args: Vec<String> = std::env::args().collect();
+
+    if args.len() <= 1 {
+        highlight("Please supply 1 argument to indicate the LLM to run : 0 = gemini, 1 = gpt");
+        highlight("This run will default to gemini\n\n");
+    } else {
+        llm = args[1].parse::<usize>().unwrap_or_default();
+    }
+
     highlight("Type multiple lines and then end with ^D [or ^Z on Windows] for answer.");
     highlight("'quit' or 'exit' work too. To clear history 'new' or 'clear'");
     highlight("To show dialogue history 'show' or 'history'");
@@ -37,7 +48,7 @@ async fn main() {
 
         prompts.push(prompt);
 
-        let res: Result<String, Box<dyn std::error::Error + Send>> = llm_chat(&prompts[..]).await;
+        let res: Result<String, Box<dyn std::error::Error + Send>> = llm_chat(llm, &prompts[..]).await;
 
         match res {
             Ok(res_str) => {
@@ -55,28 +66,35 @@ async fn main() {
     }
 }
 
-async fn gemini(content: Vec<Content>) -> String{
+async fn gemini(content: Vec<Content>) -> String {
     match call_gemini(content).await {
-        Ok((text, finish_reason, citations, metadata)) => {
-            if !finish_reason.is_empty() && finish_reason != "STOP" {
-                println!("Finish Reason: {}", finish_reason);
-            }
-            if !citations.is_empty() {
-                println!("{}", citations);
-            }
-
-            println!("{}", metadata);
-
-            text
-        },
-        Err(e) => { e.to_string() },
+        Ok(ret) => ret.to_string(),
+        Err(e) => e.to_string()
     }
 }
 
-async fn llm_chat(prompts: &[String]) -> Result<String, Box<dyn std::error::Error + Send>> {
-    let content = Content::dialogue(prompts);
+async fn gpt(messages: Vec<GptMessage>) -> String {
+    match call_gpt(messages).await {
+        Ok(ret) => ret.to_string(),
+        Err(e) => e.to_string()
+    }
+}
 
-    let ret = gemini(content).await;
+async fn llm_chat(llm: usize, prompts: &[String]) -> Result<String, Box<dyn std::error::Error + Send>> {
+    let ret =
+        match llm {
+            0 => {
+                let content = Content::dialogue(prompts);
+
+                gemini(content).await
+            },
+            1 => {
+                let message = GptMessage::dialogue(prompts);
+
+                gpt(message).await
+            },
+            _ => "No such llm".to_string()
+        };
 
     Ok(ret)
 }
