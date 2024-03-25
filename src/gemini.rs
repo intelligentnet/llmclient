@@ -1,3 +1,5 @@
+use std::pin::Pin;
+use serde::ser::StdError;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::process::Command;
@@ -5,7 +7,7 @@ use serde_derive::{Deserialize, Serialize};
 use stemplate::Template;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use crate::common::{LlmType, LlmReturn};
+use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage};
 
 // Input structures
 // Chat
@@ -22,11 +24,103 @@ pub struct GeminiCompletion {
 }
 
 impl GeminiCompletion {
-    // Crete new Completeion object
+    /// Create new Completion object
     pub fn new(contents: Vec<Content>, safety_settings: Vec<SafetySettings>, generation_config: GenerationConfig) -> Self {
         GeminiCompletion { contents, tools: None, safety_settings, generation_config }
     }
+
+    /// Create and call llm by supplying data and common parameters
+    pub async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        let mut contents = Vec::new();
+
+        if !system.is_empty() {
+            contents.push(Content::text("user", system));
+            contents.push(Content::text("model", "Understood"));
+        }
+        user.iter()
+            .enumerate()
+            .for_each(|(i, c)| {
+                let role = if !is_chat || i % 2 == 0 { "user" } else { "model" };
+
+                contents.push(Content::text(role, c));
+            });
+
+        let completion = GeminiCompletion {
+            contents,
+            tools: None,
+            safety_settings: SafetySettings::high_block(),
+            generation_config: GenerationConfig::new(Some(temperature), None, None, 1, Some(8192), None)
+        };
+
+        call_gemini_completion(&completion).await
+    }
 }
+
+impl Default for GeminiCompletion {
+    /// Create default Completion object
+    fn default() -> Self {
+        GeminiCompletion { 
+            contents: Vec::new(),
+            tools: None,
+            safety_settings: Vec::new(),
+            generation_config: GenerationConfig::new(Some(0.2), None, None, 1, Some(8192), None)
+        }
+    }
+}
+
+impl LlmCompletion for GeminiCompletion {
+    /// Add single role and single part text
+    fn add_text(&mut self, role: &str, text: &str) {
+        self.contents.push(Content::text(role, text));
+    }
+
+    /// Add single role with multiple strings for parts as single large content
+    fn add_many_text(&mut self, role: &str, texts: &[String]) {
+        self.contents.push(Content::many_text(role, texts));
+    }
+
+    /// Supply simple, 'system' content
+    fn add_system(&mut self, system_prompt: &str) {
+        self.contents.append(&mut Content::system(system_prompt));
+    }
+
+    /// Supply multi-parts and single 'system' content
+    fn add_multi_part_system(&mut self, system_prompts: &[String]) {
+        self.contents.append(&mut Content::multi_part_system(system_prompts));
+    }
+
+    /// Supply multi-context 'system' content
+    fn add_systems(&mut self, system_prompts: &[String]) {
+        self.contents.append(&mut Content::systems(system_prompts));
+    }
+
+    /// Supply multi-String content with user and llm alternating
+    fn dialogue(&mut self, prompts: &[String], has_system: bool) {
+        self.contents = Content::dialogue(prompts, has_system);
+    }
+    
+    /// Truncate messages
+    fn truncate_messages(&mut self, len: usize) {
+        self.contents.truncate(len);
+    }
+
+    /// Return String of Object
+    fn debug(&self) -> String where Self: std::fmt::Debug {
+        format!("{:?}", self)
+    }
+
+    // Set content in precreated completion
+    //fn set_content(&mut self, content: Vec<Box<dyn LlmMessage>>) {
+    //    self.contents = content.iter().map(|c| *(&c as &Content)).collect();
+    //}
+
+    /// Default call to LLM so trait can be used for simple calls
+    //fn call_llm(&self) -> Result<impl std::future::Future<Output=LlmReturn>, Box<dyn std::error::Error + Send>> {
+    fn call_llm(&'static self) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + std::marker::Send + 'static)>>> + std::marker::Send + 'static)>> {
+        Box::pin(call_gemini_completion(self))
+    }
+}
+
 
 /// This is the primary structure for loading a call. See implementation.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -39,73 +133,80 @@ pub struct Content {
 impl Content {
     /// Supply single role and single part text
     pub fn one(role: &str, part: Part) -> Self {
-        Content { role: role.into(), parts: vec![part]  }
-    }
-
-    /// Supply single role and single text string for Part
-    pub fn text(role: &str, text: &str) -> Self {
-        Content { role: role.into(), parts: vec![Part::text(text)] }
+        Self { role: role.into(), parts: vec![part]  }
     }
 
     /// Supply single role and multi-part text
     pub fn many(role: &str, parts: Vec<Part>) -> Self {
-        Content { role: role.into(), parts }
+        Self { role: role.into(), parts }
+    }
+
+    /// Supply inline file data
+    pub fn to_inline(role: &str, mime_type: &str, content: &[u8]) -> Vec<Self> {
+        vec![Self { role: role.into(), parts: vec![Part::inline_data(mime_type, content)] }]
+    }
+
+    /// Supply file data for previously supplied file
+    pub fn file(role: &str, mime_type: &str, file: &str) -> Vec<Self> {
+        vec![Self { role: role.into(), parts: vec![Part::file_data(mime_type, file)] }]
+    }
+}
+
+impl LlmMessage for Content {
+    /// Supply single role and single text string for Part
+    fn text(role: &str, text: &str) -> Self {
+        Self { role: role.into(), parts: vec![Part::text(text)] }
     }
 
     /// Supply single role with multi-string for iparts with single content
-    pub fn many_text(role: &str, parts: &[String]) -> Self {
+    fn many_text(role: &str, parts: &[String]) -> Self {
         let parts: Vec<Part> = parts.iter()
             .map(|p| Part::text(p))
             .collect();
 
-        Content { role: role.into(), parts }
+        Self { role: role.into(), parts }
     }
 
     /// Supply simple, 'system' content
-    pub fn system(system_prompt: &str) -> Vec<Self> {
-        vec![Content::text("user", system_prompt), Content::text("model", "Understood")]
+    fn system(system_prompt: &str) -> Vec<Self> {
+        vec![Self::text("user", system_prompt), Self::text("model", "Understood")]
     }
 
     /// Supply multi-parts and single 'system' content
-    pub fn multi_part_system(system_prompts: &[String]) -> Vec<Self> {
-        vec![Content::many_text("user", system_prompts), Content::text("model", "Understood")]
+    fn multi_part_system(system_prompts: &[String]) -> Vec<Self> {
+        vec![Self::many_text("user", system_prompts), Self::text("model", "Understood")]
     }
 
     /// Supply multi-context 'system' content
-    pub fn systems(system_prompts: &[String]) -> Vec<Self> {
+    fn systems(system_prompts: &[String]) -> Vec<Self> {
         let n = system_prompts.len() * 2;
 
         (0..n)
             .map(|i| {
                 if i % 2 == 0 {
-                    Content::text("user", &system_prompts[i / 2])
+                    Self::text("user", &system_prompts[i / 2])
                 } else {
-                    Content::text("model", "Understood")
+                    Self::text("model", "Understood")
                 }
             })
             .collect()
     }
 
     /// Supply multi-String content with user and model alternating
-    pub fn dialogue(prompts: &[String]) -> Vec<Self> {
+    fn dialogue(prompts: &[String], _has_system: bool) -> Vec<Self> {
         prompts.iter()
             .enumerate()
             .map(|(i, p)| {
                 let role = if i % 2 == 0 { "user" } else { "model" };
 
-                Content::text(role, p)
+                Self::text(role, p)
             })
             .collect()
     }
 
-    /// Supply inline file data
-    pub fn to_inline(role: &str, mime_type: &str, content: &[u8]) -> Vec<Self> {
-        vec![Content { role: role.into(), parts: vec![Part::inline_data(mime_type, content)] }]
-    }
-
-    /// Supply file data for previously supplied file
-    pub fn file(role: &str, mime_type: &str, file: &str) -> Vec<Self> {
-        vec![Content { role: role.into(), parts: vec![Part::file_data(mime_type, file)] }]
+    /// Return String of Object
+    fn debug(&self) -> String where Self: std::fmt::Debug {
+        format!("{:?}", self)
     }
 }
 
@@ -413,15 +514,26 @@ pub struct Usage {
 
 impl std::fmt::Display for Usage {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Tokens: {} + {} = {}", self.prompt_token_count, self.candidates_token_count, self.total_token_count)
+        write!(f, "{} + {} = {}", self.prompt_token_count, self.candidates_token_count, self.total_token_count)
     }
 }
 
 impl Usage {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Usage { prompt_token_count: 0, candidates_token_count: 0, total_token_count: 0 }
     }
+
+    pub fn to_triple(&self) -> (usize, usize, usize) {
+        (self.prompt_token_count, self.candidates_token_count, self.total_token_count)
+    }
 }
+
+impl Default for Usage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ResponseContent {
@@ -513,16 +625,16 @@ pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Res
             }
         })
         .collect::<String>()).collect();
-    let usage: String = res.iter()
-        .fold(Usage::new(), |mut s: Usage, g| {
+    let usage: Triple = res.iter()
+        .fold((0, 0, 0), |mut s: Triple, g| {
             if let Some(m) = &g.usage_metadata {
-                s.prompt_token_count += m.prompt_token_count;
-                s.candidates_token_count += m.candidates_token_count;
-                s.total_token_count += m.total_token_count;
+                s.0 += m.prompt_token_count;
+                s.1 += m.candidates_token_count;
+                s.2 += m.total_token_count;
             }
             s
-        }).to_string();
-    let timing: String = format!("{:?}", start.elapsed());
+        });
+    let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
     // Remove any comments
     let text = text.lines()

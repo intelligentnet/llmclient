@@ -1,6 +1,14 @@
 # LLM Client
 A LLM Rust Client for Google Gemini and OpenAI GPT
 
+LATEST:
+-------
+
+0.1.5 : Tidied up, refactiorsed, common functionality over multiple LLMs created. Gemini and GPT working, Claude next
+
+Introduction
+------------
+
 Google is the first in what will hopefully be a series of interfaces to various online LLMs. OpenAI, Anthropic and Mistral all work for basic functionality for text but need some polishing. There is a high degree of volatility and only so many hours in a day to create and maintain these interfaces. 
 
 The Goal
@@ -25,7 +33,7 @@ TODO
 
 - Better support for non-text searches
 - Add 'function calling'
-- If required add more helper functions to help unpack data from Gemini
+- If required add more helper functions to help unpack data from each vendor
 - Fix bugs that will inevitably come up as this interface matures
 - Keep up with Google
 

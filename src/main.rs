@@ -3,8 +3,8 @@ use crossterm::{
     ExecutableCommand,
 };
 use std::io::{stdin, stdout};
-use llmclient::gemini::{call_gemini, Content};
-use llmclient::gpt::{call_gpt, GptMessage};
+use llmclient::gemini::GeminiCompletion;
+use llmclient::gpt::GptCompletion;
 
 #[tokio::main]
 async fn main() {
@@ -21,41 +21,78 @@ async fn main() {
     highlight("Type multiple lines and then end with ^D [or ^Z on Windows] for answer.");
     highlight("'quit' or 'exit' work too. To clear history 'new' or 'clear'");
     highlight("To show dialogue history 'show' or 'history'");
-
-    let mut prompts: Vec<String> = Vec::new();
+    highlight("To show optional system content 'system'");
 
     // Are 'system' context instructions available?
     let system_data = std::fs::read_to_string("system.txt");
-    if let Ok(ref system) = system_data {
-        prompts.push(system.into());
-        prompts.push("Understood".into());
-    }
+
+    let system: String =
+        if let Ok(system) = system_data {
+            system
+        } else {
+            "".into()
+        };
+
+    let mut prompts: Vec<String> = Vec::new();
+
+    // Statistics
+    let mut timer = 0.0;
+    let mut in_tok = 0;
+    let mut out_tok = 0;
+    let mut all_tok = 0;
 
     loop {
         let prompt = get_user_response("Your question: ");
 
-        if prompt.is_empty() || prompt.to_lowercase() == "quit" || prompt.to_lowercase() == "exit" {
-            break;
-        } else if prompt.to_lowercase() == "new" || prompt.to_lowercase() == "clear" {
-            prompts.truncate(if system_data.is_ok() { 2 } else { 0 });
-
-            continue;
-        } else if prompt.to_lowercase() == "show" || prompt.to_lowercase() == "history" {
-            println!("{:?}", prompts);
-
-            continue;
+        if prompt.is_empty() {
+            break
         }
+
+        let prompt_lower: &str = &prompt.to_lowercase();
+
+        let prompt =
+            match prompt_lower {
+                "quit" | "exit" => {
+                    break
+                },
+                "new" | "clear" => {
+                    prompts.truncate(0);
+
+                    continue
+                },
+                "show" | "history" => {
+                    println!("{:?}", prompts);
+
+                    continue
+                },
+                "system" => {
+                    println!("{:?}", system);
+
+                    continue;
+                },
+                _ => prompt,
+            };
 
         prompts.push(prompt);
 
-        let res: Result<String, Box<dyn std::error::Error + Send>> = llm_chat(llm, &prompts[..]).await;
+        let res = match llm {
+            0 => GeminiCompletion::call(&system, &prompts, 0.2, false, true).await,
+            1 => GptCompletion::call(&system, &prompts, 0.2, false, true).await,
+            _ => todo!()
+        };
 
         match res {
-            Ok(res_str) => {
+            Ok(ret) => {
 
-                prompts.push(res_str.clone());
+                timer += ret.timing;
+                in_tok += ret.usage.0;
+                out_tok += ret.usage.1;
+                all_tok += ret.usage.2;
 
-                println!("> {}", res_str);
+                let ret = ret.to_string();
+                println!("> {}", ret);
+
+                prompts.push(ret);
             },
             Err(e) => {
                 println!("Error (aborting): {}", e);
@@ -64,39 +101,9 @@ async fn main() {
             }
         }
     }
-}
 
-async fn gemini(content: Vec<Content>) -> String {
-    match call_gemini(content).await {
-        Ok(ret) => ret.to_string(),
-        Err(e) => e.to_string()
-    }
-}
-
-async fn gpt(messages: Vec<GptMessage>) -> String {
-    match call_gpt(messages).await {
-        Ok(ret) => ret.to_string(),
-        Err(e) => e.to_string()
-    }
-}
-
-async fn llm_chat(llm: usize, prompts: &[String]) -> Result<String, Box<dyn std::error::Error + Send>> {
-    let ret =
-        match llm {
-            0 => {
-                let content = Content::dialogue(prompts);
-
-                gemini(content).await
-            },
-            1 => {
-                let message = GptMessage::dialogue(prompts);
-
-                gpt(message).await
-            },
-            _ => "No such llm".to_string()
-        };
-
-    Ok(ret)
+    println!("Statistics: Elapsed time: {} secs, Tokens in: {} out: {} all: {}",
+             timer, in_tok, out_tok, all_tok);
 }
 
 fn highlight(text: &str) {

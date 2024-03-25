@@ -1,6 +1,6 @@
 [package]
 name = "llmclient"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 authors = ["Chris Dipple <chris@intelligent-net.co.uk>"]
 license = "MIT OR Apache-2.0"
@@ -22,3 +22,4 @@ serde_derive = "^1"
 base64 = "0.21"
 stemplate = "0.1"
 crossterm = "0.27"
+futures = "0.3.30"

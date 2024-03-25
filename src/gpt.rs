@@ -1,8 +1,10 @@
+use std::pin::Pin;
+use serde::ser::StdError;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::env;
 use serde_derive::{Deserialize, Serialize};
-use crate::common::{LlmType, LlmReturn};
+use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage};
 
 // Input structures
 // Chat
@@ -18,13 +20,137 @@ pub struct GptCompletion {
 
 impl GptCompletion {
     /// Create chat completion
-    fn new(model: String, messages: Vec<GptMessage>, temperature: f32, is_json: bool) -> Self {
+    pub fn new(messages: Vec<GptMessage>, temperature: f32, is_json: bool) -> Self {
+        let model: String = env::var("GPT_VERSION").expect("GPT_VERSION not found in enviornment variables");
+
         GptCompletion {
             model,
             messages,
             temperature,
             response_format: ResponseFormat::new(is_json)
         }
+    }
+
+    /// Create and call llm by supplying data and common parameters
+    pub async fn call(system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        let model: String = env::var("GPT_VERSION").expect("GPT_VERSION not found in enviornment variables");
+        let mut messages = Vec::new();
+
+        if !system.is_empty() {
+            messages.push(GptMessage { role: "system".into(), content: system.into() });
+        }
+        user.iter()
+            .enumerate()
+            .for_each(|(i, c)| {
+                let role = if !is_chat || i % 2 == 0 { "user" } else { "assistent" };
+
+                messages.push(GptMessage { role: role.into(), content: c.to_string() });
+            });
+
+        let completion = GptCompletion {
+            model,
+            messages,
+            temperature,
+            response_format: ResponseFormat::new(is_json)
+        };
+
+        call_gpt_completion(&completion).await
+    }
+
+    pub fn set_model(&mut self, model: &str) {
+        self.model = model.into();
+    }
+
+    pub fn set_response_format(&mut self, response_format: &ResponseFormat) {
+        self.response_format = response_format.clone();
+    }
+
+    pub fn set_temperature(&mut self, temperature: f32) {
+        self.temperature = temperature;
+    }
+
+    /// Add a single new message
+    pub fn add_message(&mut self, message: &GptMessage) {
+        self.messages.push(message.clone());
+    }
+
+    /// Add many new messages
+    pub fn add_messages(&mut self, messages: &[GptMessage]) {
+        messages.iter().for_each(|m| self.messages.push(m.clone()));
+    }
+}
+
+impl Default for GptCompletion {
+    /// Create default chat completion
+    fn default() -> Self {
+        let model: String = env::var("GPT_VERSION").expect("GPT_VERSION not found in enviornment variables");
+
+        GptCompletion {
+            model,
+            messages: Vec::new(),
+            temperature: 0.2,
+            response_format: ResponseFormat::new(false)
+        }
+    }
+}
+
+impl LlmCompletion for GptCompletion {
+    /// Add single role and single part text
+    fn add_text(&mut self, role: &str, text: &str) {
+        self.messages.push(GptMessage::text(role, text));
+    }
+
+    /// Add single role with multiple strings for parts as single large content
+    fn add_many_text(&mut self, role: &str, texts: &[String]) {
+        self.messages.push(GptMessage::many_text(role, texts));
+    }
+
+    /// Supply simple, 'system' content
+    fn add_system(&mut self, system_prompt: &str) {
+        self.messages.append(&mut GptMessage::system(system_prompt));
+    }
+
+    /// Supply multi-parts and single 'system' content
+    fn add_multi_part_system(&mut self, system_prompts: &[String]) {
+        self.messages.append(&mut GptMessage::multi_part_system(system_prompts));
+    }
+
+    /// Supply multi-context 'system' content
+    fn add_systems(&mut self, system_prompts: &[String]) {
+        self.messages.append(&mut GptMessage::systems(system_prompts));
+    }
+
+    /// Supply multi-String content with user and llm alternating
+    fn dialogue(&mut self, prompts: &[String], has_system: bool) {
+        self.messages = GptMessage::dialogue(prompts, has_system);
+    }
+    
+    /// Truncate messages
+    fn truncate_messages(&mut self, len: usize) {
+        self.messages.truncate(len);
+    }
+
+    /// Return String of Object
+    fn debug(&self) -> String where Self: std::fmt::Debug {
+        format!("{:?}", self)
+    }
+
+    // Set content in precreated completion
+    //fn set_content(&mut self, content: Vec<Box<dyn LlmMessage>>) {
+    //    self.messages = content;
+    //}
+
+    /*
+    /// Create and Call LLM
+    fn create_call_llm(system: &Vec<&str>, user: &Vec<&str>, temperature: f32, is_json: bool, is_chat: bool) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + Send + 'static)>>> + Send + 'static)>> {
+
+        Box::pin(call_gpt_completion(llm))
+    }
+    */
+
+    /// Default call to LLM so trait can be used for simple calls
+    fn call_llm(&'static self) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + Send + 'static)>>> + Send + 'static)>> {
+        Box::pin(call_gpt_completion(self))
     }
 }
 
@@ -52,14 +178,14 @@ pub struct GptMessage {
     pub content: String,
 }
 
-impl GptMessage {
+impl LlmMessage for GptMessage {
     /// Supply single role and single part text
-    pub fn text(role: &str, content: &str) -> Self {
-        GptMessage { role: role.into(), content: content.into() }
+    fn text(role: &str, content: &str) -> Self {
+        Self { role: role.into(), content: content.into() }
     }
 
     /// Supply single role with multi-string for iparts with single content
-    pub fn many_text(role: &str, prompt: &[String]) -> Self {
+    fn many_text(role: &str, prompt: &[String]) -> Self {
         let prompt: String = 
             prompt.iter()
                 .fold(String::new(), |mut s, p| {
@@ -69,34 +195,49 @@ impl GptMessage {
                     s
                 });
 
-        GptMessage { role: role.into(), content: prompt }
+        Self { role: role.into(), content: prompt }
     }
 
-    pub fn system(system_prompt: &str) -> Vec<Self> {
-        vec![GptMessage::text("system", system_prompt)]
+    /// Supply simple, 'system' content
+    fn system(system_prompt: &str) -> Vec<Self> {
+        vec![Self::text("system", system_prompt)]
     }
 
-    pub fn multi_part_system(system_prompts: &[String]) -> Vec<Self> {
-        vec![GptMessage::many_text("system", system_prompts)]
+    /// Supply multi-parts and single 'system' content
+    fn multi_part_system(system_prompts: &[String]) -> Vec<Self> {
+        vec![Self::many_text("system", system_prompts)]
     }
 
     /// Supply multi-context 'system' content
-    pub fn systems(system_prompts: &[String]) -> Vec<Self> {
+    fn systems(system_prompts: &[String]) -> Vec<Self> {
         system_prompts.iter()
-            .map(|sp| GptMessage::text("system", &sp))
+            .map(|sp| Self::text("system", sp))
             .collect()
     }
 
     /// Supply multi-String content with user and model alternating
-    pub fn dialogue(prompts: &[String]) -> Vec<Self> {
+    fn dialogue(prompts: &[String], has_system: bool) -> Vec<Self> {
         prompts.iter()
             .enumerate()
             .map(|(i, p)| {
-                let role = if i % 2 == 0 { "user" } else { "assistant" };
+                let role = if i % 2 == 0 {
+                    if i == 0 && has_system {
+                        "system"
+                    } else {
+                        "user"
+                    }
+                } else {
+                    "assistant"
+                };
 
-                GptMessage::text(role, p)
+                Self::text(role, p)
             })
             .collect()
+    }
+
+    /// Return String of Object
+    fn debug(&self) -> String where Self: std::fmt::Debug {
+        format!("{:?}", self)
     }
 }
 
@@ -132,11 +273,21 @@ impl Usage {
     pub fn new() -> Self {
         Usage { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
     }
+
+    pub fn to_triple(&self) -> (usize, usize, usize) {
+        (self.prompt_tokens, self.completion_tokens, self.total_tokens)
+    }
 }
 
 impl std::fmt::Display for Usage {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "Tokens: {} + {} = {}", self.prompt_tokens, self.completion_tokens, self.total_tokens)
+        write!(f, "{} + {} = {}", self.prompt_tokens, self.completion_tokens, self.total_tokens)
+    }
+}
+
+impl Default for Usage {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -154,20 +305,24 @@ pub async fn call_gpt_temperature(messages: Vec<GptMessage>, temperature: f32) -
 }
 
 pub async fn call_gpt_all(messages: Vec<GptMessage>, temperature: f32, is_json: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    // Create chat completion
+
+    let gpt_completion = GptCompletion::new(messages, temperature, is_json);
+
+    call_gpt_completion(&gpt_completion).await
+}
+
+pub async fn call_gpt_completion(gpt_completion: &GptCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
-    let model: String = env::var("GPT_VERSION").expect("GPT_VERSION not found in enviornment variables");
     // Confirm endpoint
     let url: String = env::var("GPT_CHAT_URL").expect("GPT_CHAT_URL not found in enviornment variables");
 
     let client = get_client().await?;
 
-    // Create chat completion
-    let chat_completion = GptCompletion::new(model, messages, temperature, is_json);
-
     // Extract API Response
     let res = client
         .post(url)
-        .json(&chat_completion)
+        .json(&gpt_completion)
         .send()
         .await;
     let res: GptResponse = res
@@ -183,7 +338,7 @@ pub async fn call_gpt_all(messages: Vec<GptMessage>, temperature: f32, is_json: 
     // Send Response
     let text: String =
         match res.choices {
-            Some(ref choices) if choices.len() >= 1 => {
+            Some(ref choices) if !choices.is_empty() => {
                 // For now they only return one choice!
                 let text = choices[0].message.content.clone();
                 let text = text.lines().filter(|l| !l.starts_with("```")).fold(String::new(), |s, l| s + l + "\n");
@@ -196,7 +351,7 @@ pub async fn call_gpt_all(messages: Vec<GptMessage>, temperature: f32, is_json: 
         };
     let finish_reason: String = 
         match res.choices {
-            Some(ref choices) if choices.len() >= 1 => {
+            Some(ref choices) if !choices.is_empty() => {
                 // For now they only return one choice!
                 choices[0].finish_reason.to_string().to_uppercase()
             },
@@ -204,8 +359,8 @@ pub async fn call_gpt_all(messages: Vec<GptMessage>, temperature: f32, is_json: 
                 "None".into()
             }
         };
-    let usage: String = res.usage.to_string();
-    let timing = format!("{:?}", start.elapsed());
+    let usage: Triple = res.usage.to_triple();
+    let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
     Ok(LlmReturn::new(LlmType::GPT, text, finish_reason, usage, timing, None, None))
 }
