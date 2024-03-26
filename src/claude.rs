@@ -42,9 +42,6 @@ impl ClaudeCompletion {
         let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviornment variables");
         let mut messages = Vec::new();
 
-        if !system.is_empty() {
-            messages.push(ClaudeMessage { role: "system".into(), content: system.into() });
-        }
         user.iter()
             .enumerate()
             .for_each(|(i, c)| {
