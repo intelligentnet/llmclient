@@ -5,6 +5,7 @@ use crossterm::{
 use std::io::{stdin, stdout};
 use llmclient::gemini::GeminiCompletion;
 use llmclient::gpt::GptCompletion;
+use llmclient::claude::ClaudeCompletion;
 
 #[tokio::main]
 async fn main() {
@@ -12,7 +13,7 @@ async fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() <= 1 {
-        highlight("Please supply 1 argument to indicate the LLM to run : 0 = gemini, 1 = gpt");
+        highlight("Please supply 1 argument to indicate the LLM to run : 0 = Gemini, 1 = GPT, Claude = 2" );
         highlight("This run will default to gemini\n\n");
     } else {
         llm = args[1].parse::<usize>().unwrap_or_default();
@@ -78,6 +79,7 @@ async fn main() {
         let res = match llm {
             0 => GeminiCompletion::call(&system, &prompts, 0.2, false, true).await,
             1 => GptCompletion::call(&system, &prompts, 0.2, false, true).await,
+            2 => ClaudeCompletion::call(&system, &prompts, 0.2, false, true).await,
             _ => todo!()
         };
 

@@ -4,7 +4,8 @@ use serde::ser::StdError;
 #[derive(Debug, Clone)]
 pub enum LlmType  {
     GEMINI,
-    GPT
+    GPT,
+    CLAUDE
 }
 
 pub type Triple = (usize, usize, usize);
@@ -14,6 +15,7 @@ impl std::fmt::Display for LlmType {
         match self {
             LlmType::GEMINI => write!(f, "GEMINI"),
             LlmType::GPT => write!(f, "GPT"),
+            LlmType::CLAUDE => write!(f, "CLAUDE"),
         }
     }
 }

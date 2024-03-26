@@ -4,7 +4,8 @@ A LLM Rust Client for Google Gemini and OpenAI GPT
 LATEST:
 -------
 
-0.1.5 : Tidied up, refactiorsed, common functionality over multiple LLMs created. Gemini and GPT working, Claude next
+0.1.5: Tidied up, refactored, common functionality over multiple LLMs created. Gemini and GPT working, Claude next
+0.1.6: Anthropic Claude added. Good quality answers but seems to get Overloaded/Rate Limited.
 
 Introduction
 ------------

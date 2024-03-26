@@ -21,7 +21,7 @@ pub struct GptCompletion {
 impl GptCompletion {
     /// Create chat completion
     pub fn new(messages: Vec<GptMessage>, temperature: f32, is_json: bool) -> Self {
-        let model: String = env::var("GPT_VERSION").expect("GPT_VERSION not found in enviornment variables");
+        let model: String = env::var("GPT_MODEL").expect("GPT_MODEL not found in enviornment variables");
 
         GptCompletion {
             model,
@@ -33,7 +33,7 @@ impl GptCompletion {
 
     /// Create and call llm by supplying data and common parameters
     pub async fn call(system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-        let model: String = env::var("GPT_VERSION").expect("GPT_VERSION not found in enviornment variables");
+        let model: String = env::var("GPT_MODEL").expect("GPT_MODEL not found in enviornment variables");
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -42,7 +42,7 @@ impl GptCompletion {
         user.iter()
             .enumerate()
             .for_each(|(i, c)| {
-                let role = if !is_chat || i % 2 == 0 { "user" } else { "assistent" };
+                let role = if !is_chat || i % 2 == 0 { "user" } else { "assistant" };
 
                 messages.push(GptMessage { role: role.into(), content: c.to_string() });
             });
@@ -83,7 +83,7 @@ impl GptCompletion {
 impl Default for GptCompletion {
     /// Create default chat completion
     fn default() -> Self {
-        let model: String = env::var("GPT_VERSION").expect("GPT_VERSION not found in enviornment variables");
+        let model: String = env::var("GPT_MODEL").expect("GPT_MODEL not found in enviornment variables");
 
         GptCompletion {
             model,
