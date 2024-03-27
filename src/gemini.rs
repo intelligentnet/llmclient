@@ -7,7 +7,7 @@ use serde_derive::{Deserialize, Serialize};
 use stemplate::Template;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage};
+use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage, LlmError};
 
 // Input structures
 // Chat
@@ -48,7 +48,7 @@ impl GeminiCompletion {
         let completion = GeminiCompletion {
             contents,
             tools: None,
-            safety_settings: SafetySettings::high_block(),
+            safety_settings: SafetySettings::low_block(),
             generation_config: GenerationConfig::new(Some(temperature), None, None, 1, Some(8192), None)
         };
 
@@ -534,7 +534,6 @@ impl Default for Usage {
     }
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ResponseContent {
     pub role: String,
@@ -584,67 +583,78 @@ pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Res
         .send()
         .await;
 
-    let res: Vec<GeminiResponse> = res
+    //let res: Vec<GeminiResponse> = res
+    let res = res
         .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?
-        .json()
+        //.json()
+        .text()
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?;
 
-    // Now unpack it
-    let text: String = res.iter()
-        .map(|gr| gr.candidates.iter().map(|c| {
-            if let Some(parts) = &c.content.parts {
-                parts.iter().map(|p| p.text.trim().to_owned() + " ").collect::<String>()
-            } else {
-                "".into()
-            }
-        })
-        .collect::<String>()).collect();
-    let finish_reason: String = res.iter()
-        .map(|gr| gr.candidates.iter().map(|c| {
-            if let Some(finish) = &c.finish_reason { finish.clone() } else { "".into() }
-        })
-        .collect::<String>()).collect();
-    let safety_ratings: Vec<String> = res.iter()
-        .map(|gr| gr.candidates.iter()
-            .map(|c| if c.safety_ratings.is_some() {
-                format!("{:?}", c.safety_ratings)
-            } else {
-                "".into()
-            })
-            .collect::<String>())
-        .filter(|s| !s.is_empty() && s != "Some([, , , ])") // NOT elegant!
-        .collect();
-    let citations: String = res.iter()
-        .map(|gr| gr.candidates.iter().map(|c| {
-            if let Some(citation_metadata) = &c.citation_metadata {
-                citation_metadata.citations.iter()
-                    .map(|c| c.to_string()).collect::<String>()
-            } else {
-                "".into()
-            }
-        })
-        .collect::<String>()).collect();
-    let usage: Triple = res.iter()
-        .fold((0, 0, 0), |mut s: Triple, g| {
-            if let Some(m) = &g.usage_metadata {
-                s.0 += m.prompt_token_count;
-                s.1 += m.candidates_token_count;
-                s.2 += m.total_token_count;
-            }
-            s
-        });
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
-    // Remove any comments
-    let text = text.lines()
-        .filter(|l| !l.starts_with("```"))
-        .fold(String::new(), |s, l| s + l + "\n");
+    if res.contains("\"error\":") {
+        let res: Vec<LlmError> = serde_json::from_str(&res).unwrap();
 
-    Ok(LlmReturn::new(LlmType::GEMINI, text, finish_reason, usage, timing,
-                      if citations.is_empty() { None } else { Some(citations) },
-                      if safety_ratings.is_empty() { None } else { Some(safety_ratings) }
-                      ))
+        Ok(LlmReturn::new(LlmType::GEMINI_ERROR, res[0].error.to_string(), res[0].error.to_string(), (0, 0, 0), timing, None, None))
+    } else {
+        let res: Vec<GeminiResponse> = serde_json::from_str(&res).unwrap();
+
+        // Now unpack it
+        let text: String = res.iter()
+            .map(|gr| gr.candidates.iter().map(|c| {
+                if let Some(parts) = &c.content.parts {
+                    parts.iter().map(|p| p.text.trim().to_owned() + " ").collect::<String>()
+                } else {
+                    "".into()
+                }
+            })
+            .collect::<String>()).collect();
+        let finish_reason: String = res.iter()
+            .map(|gr| gr.candidates.iter().map(|c| {
+                if let Some(finish) = &c.finish_reason { finish.clone() } else { "".into() }
+            })
+            .collect::<String>()).collect();
+        let safety_ratings: Vec<String> = res.iter()
+            .map(|gr| gr.candidates.iter()
+                .map(|c| if c.safety_ratings.is_some() {
+                    format!("{:?}", c.safety_ratings)
+                } else {
+                    "".into()
+                })
+                .collect::<String>())
+            .filter(|s| !s.is_empty() && s != "Some([, , , ])") // NOT elegant!
+            .collect();
+        let citations: String = res.iter()
+            .map(|gr| gr.candidates.iter().map(|c| {
+                if let Some(citation_metadata) = &c.citation_metadata {
+                    citation_metadata.citations.iter()
+                        .map(|c| c.to_string()).collect::<String>()
+                } else {
+                    "".into()
+                }
+            })
+            .collect::<String>()).collect();
+        let usage: Triple = res.iter()
+            .fold((0, 0, 0), |mut s: Triple, g| {
+                if let Some(m) = &g.usage_metadata {
+                    s.0 += m.prompt_token_count;
+                    s.1 += m.candidates_token_count;
+                    s.2 += m.total_token_count;
+                }
+                s
+            });
+
+        // Remove any comments
+        let text = text.lines()
+            .filter(|l| !l.starts_with("```"))
+            .fold(String::new(), |s, l| s + l + "\n");
+
+        Ok(LlmReturn::new(LlmType::GEMINI, text, finish_reason, usage, timing,
+                          if citations.is_empty() { None } else { Some(citations) },
+                          if safety_ratings.is_empty() { None } else { Some(safety_ratings) }
+                          ))
+    }
 }
 
 /// Add 'system' content to other content

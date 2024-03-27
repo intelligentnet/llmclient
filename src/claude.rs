@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::env;
 use serde_derive::{Deserialize, Serialize};
-use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage};
+use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage, LlmError};
 use crate::gpt::GptMessage as ClaudeMessage;
 
 // Input structures
@@ -247,31 +247,35 @@ pub async fn call_cluade_completion(claude_completion: &ClaudeCompletion) -> Res
         .text()
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?;
-
-    if res.contains("{\"type\":\"error\"") {
-        eprintln!("{res:?}");
-    }
-
-    let res: ClaudeResponse = serde_json::from_str::<ClaudeResponse>(&res).unwrap();
-
-    // Send Response
-    let text =
-        match res.content {
-            Some(content) => {
-                let text = content.iter().map(|s| s.text.lines().filter(|l| !l.starts_with("```")).fold(String::new(), |s, l| s + l + "\n")).collect();
-
-                text
-            },
-            None => {
-                //Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "No content found")))
-                "No content found".to_string()
-            }
-        };
-    let finish_reason = if res.stop_reason == "end_turn" { "STOP".to_string() } else { res.stop_reason };
-    let usage: Triple = res.usage.to_triple();
+     
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
-    Ok(LlmReturn::new(LlmType::CLAUDE, text, finish_reason, usage, timing, None, None))
+    if res.contains("\"error\":") {
+        let res: LlmError = serde_json::from_str(&res).unwrap();
+
+        Ok(LlmReturn::new(LlmType::CLAUDE_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None))
+    } else {
+        let res: ClaudeResponse = serde_json::from_str::<ClaudeResponse>(&res).unwrap();
+
+        // Send Response
+        let text =
+            match res.content {
+                Some(content) => {
+                    let text = content.iter().map(|s| s.text.lines().filter(|l| !l.starts_with("```")).fold(String::new(), |s, l| s + l + "\n")).collect();
+
+                    text
+                },
+                None => {
+                    //Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "No content found")))
+                    "No content found".to_string()
+                }
+            };
+        let finish_reason = if res.stop_reason == "end_turn" { "STOP".to_string() } else { res.stop_reason };
+        let usage: Triple = res.usage.to_triple();
+        let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
+
+        Ok(LlmReturn::new(LlmType::CLAUDE, text, finish_reason, usage, timing, None, None))
+    }
 }
 
 fn extract_role(role: &str, messages: &[ClaudeMessage]) -> String {
@@ -331,6 +335,7 @@ pub async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     async fn claude(content: Vec<ClaudeMessage>) {
         match call_cluade(content).await {
@@ -340,24 +345,28 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_call_claude_basic() {
         let messages: Vec<ClaudeMessage> = vec![ClaudeMessage { role: "user".into(), content: "What is the meaining of life?".into() }];
 
         claude(messages).await;
     }
     #[tokio::test]
+    #[serial]
     async fn test_call_claude_citation() {
         let messages = 
             vec![ClaudeMessage::text("user", "Give citations for the General theory of Relativity.")];
         claude(messages).await;
     }
     #[tokio::test]
+    //#[serial]
     async fn test_call_claude_poem() {
         let messages = 
             vec![ClaudeMessage::text("user", "Write a creative poem about the interplay of artificial intelligence and the human spirit and provide citations")];
         claude(messages).await;
     }
     #[tokio::test]
+    //#[serial]
     async fn test_call_claude_logic() {
         let messages = 
             vec![ClaudeMessage::text("user", "How many brains does an octopus have, when they have been injured and lost a leg?")];

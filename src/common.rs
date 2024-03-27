@@ -1,11 +1,16 @@
 use std::pin::Pin;
 use serde::ser::StdError;
+use serde_derive::Deserialize;
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone)]
 pub enum LlmType  {
     GEMINI,
     GPT,
-    CLAUDE
+    CLAUDE,
+    GEMINI_ERROR,
+    GPT_ERROR,
+    CLAUDE_ERROR
 }
 
 pub type Triple = (usize, usize, usize);
@@ -16,6 +21,9 @@ impl std::fmt::Display for LlmType {
             LlmType::GEMINI => write!(f, "GEMINI"),
             LlmType::GPT => write!(f, "GPT"),
             LlmType::CLAUDE => write!(f, "CLAUDE"),
+            LlmType::GEMINI_ERROR => write!(f, "GEMINI_ERROR"),
+            LlmType::GPT_ERROR => write!(f, "GPT_ERROR"),
+            LlmType::CLAUDE_ERROR => write!(f, "CLAUDE_ERROR"),
         }
     }
 }
@@ -123,4 +131,21 @@ pub trait LlmMessage {
 
     /// Return String of Object
     fn debug(&self) -> String;
+}
+
+// Lowest common denominator error message!
+#[derive(Debug, Deserialize)]
+pub struct LlmError {
+    pub error: LlmErrorMessage
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LlmErrorMessage {
+    pub message: String
+}
+
+impl std::fmt::Display for LlmErrorMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "message: {}", self.message)
+    }
 }

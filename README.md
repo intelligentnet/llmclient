@@ -1,11 +1,11 @@
-# LLM Client
-A LLM Rust Client for Google Gemini and OpenAI GPT
+#LLM Rust Client for Google Gemini, OpenAI GPT and Anthropic Claude
 
 LATEST:
 -------
 
 0.1.5: Tidied up, refactored, common functionality over multiple LLMs created. Gemini and GPT working, Claude next
 0.1.6: Anthropic Claude added. Good quality answers but seems to get Overloaded/Rate Limited.
+0.1.8: Improved remote error detection and handling
 
 Introduction
 ------------

@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::env;
 use serde_derive::{Deserialize, Serialize};
-use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage};
+use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage, LlmError};
 
 // Input structures
 // Chat
@@ -325,44 +325,51 @@ pub async fn call_gpt_completion(gpt_completion: &GptCompletion) -> Result<LlmRe
         .json(&gpt_completion)
         .send()
         .await;
-    let res: GptResponse = res
-    //let res = res
+    //let res: GptResponse = res
+    let res = res
         .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?
-        .json()
-        //.text()
+        //.json()
+        .text()
         .await
         .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?;
-//println!("{:?}", res);
-//let res: GptResponse = serde_json::from_str::<GptResponse>(&res).unwrap();
 
-    // Send Response
-    let text: String =
-        match res.choices {
-            Some(ref choices) if !choices.is_empty() => {
-                // For now they only return one choice!
-                let text = choices[0].message.content.clone();
-                let text = text.lines().filter(|l| !l.starts_with("```")).fold(String::new(), |s, l| s + l + "\n");
-
-                text
-            },
-            Some(_) | None => {
-                "None".into()
-            }
-        };
-    let finish_reason: String = 
-        match res.choices {
-            Some(ref choices) if !choices.is_empty() => {
-                // For now they only return one choice!
-                choices[0].finish_reason.to_string().to_uppercase()
-            },
-            Some(_) | None => {
-                "None".into()
-            }
-        };
-    let usage: Triple = res.usage.to_triple();
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
-    Ok(LlmReturn::new(LlmType::GPT, text, finish_reason, usage, timing, None, None))
+    if res.contains("\"error\":") {
+        let res: LlmError = serde_json::from_str(&res).unwrap();
+
+        Ok(LlmReturn::new(LlmType::GPT_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None))
+    } else {
+        let res: GptResponse = serde_json::from_str::<GptResponse>(&res).unwrap();
+
+        // Send Response
+        let text: String =
+            match res.choices {
+                Some(ref choices) if !choices.is_empty() => {
+                    // For now they only return one choice!
+                    let text = choices[0].message.content.clone();
+                    let text = text.lines().filter(|l| !l.starts_with("```")).fold(String::new(), |s, l| s + l + "\n");
+
+                    text
+                },
+                Some(_) | None => {
+                    "None".into()
+                }
+            };
+        let finish_reason: String = 
+            match res.choices {
+                Some(ref choices) if !choices.is_empty() => {
+                    // For now they only return one choice!
+                    choices[0].finish_reason.to_string().to_uppercase()
+                },
+                Some(_) | None => {
+                    "None".into()
+                }
+            };
+        let usage: Triple = res.usage.to_triple();
+
+        Ok(LlmReturn::new(LlmType::GPT, text, finish_reason, usage, timing, None, None))
+    }
 }
 
 pub async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
