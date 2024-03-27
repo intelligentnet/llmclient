@@ -22,7 +22,7 @@ serde_derive = "^1"
 base64 = "0.21"
 stemplate = "0.1"
 crossterm = "0.27"
-#futures = "0.3.30"
+futures = "0.3.30"
 
 [dev-dependencies]
 serial_test = "3.0.0"
