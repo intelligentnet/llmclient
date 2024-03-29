@@ -570,7 +570,7 @@ pub async fn call_gemini_system_all(system: Option<&str>, contents: Vec<Content>
     call_gemini_completion(&gemini_completion).await
 }
 
-// Pass a complete completion object 
+/// Pass a pre-assembled completion object 
 pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
     let url: String = Template::new("${GEMINI_URL}").render_env();

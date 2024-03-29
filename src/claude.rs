@@ -58,7 +58,7 @@ impl ClaudeCompletion {
             max_tokens: 4096
         };
 
-        call_cluade_completion(&completion).await
+        call_claude_completion(&completion).await
     }
 
     pub fn set_model(&mut self, model: &str) {
@@ -142,7 +142,7 @@ impl LlmCompletion for ClaudeCompletion {
 
     /// Default call to LLM so trait can be used for simple calls
     fn call_llm(&'static self) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + Send + 'static)>>> + Send + 'static)>> {
-        Box::pin(call_cluade_completion(self))
+        Box::pin(call_claude_completion(self))
     }
 }
 
@@ -194,19 +194,19 @@ impl Default for Usage {
 }
 
 // Call Large Language Model
-pub async fn call_cluade(messages: Vec<ClaudeMessage>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-    call_cluade_all(messages, 0.2, 4096).await
+pub async fn call_claude(messages: Vec<ClaudeMessage>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    call_claude_all(messages, 0.2, 4096).await
 }
 
-pub async fn call_cluade_temperature(messages: Vec<ClaudeMessage>, temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-    call_cluade_all(messages, temperature, 4096).await
+pub async fn call_claude_temperature(messages: Vec<ClaudeMessage>, temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    call_claude_all(messages, temperature, 4096).await
 }
 
-pub async fn call_cluade_max_tokens(messages: Vec<ClaudeMessage>, max_tokens: usize) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-    call_cluade_all(messages, 0.2, max_tokens).await
+pub async fn call_claude_max_tokens(messages: Vec<ClaudeMessage>, max_tokens: usize) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    call_claude_all(messages, 0.2, max_tokens).await
 }
 
-pub async fn call_cluade_all(messages: Vec<ClaudeMessage>, temperature: f32, max_tokens: usize) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+pub async fn call_claude_all(messages: Vec<ClaudeMessage>, temperature: f32, max_tokens: usize) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     // Model/version of lln
     let model: String =
         env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviornment variables");
@@ -222,10 +222,10 @@ pub async fn call_cluade_all(messages: Vec<ClaudeMessage>, temperature: f32, max
         max_tokens,
     };
 
-    call_cluade_completion(&claude_completion).await
+    call_claude_completion(&claude_completion).await
 }
 
-pub async fn call_cluade_completion(claude_completion: &ClaudeCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+pub async fn call_claude_completion(claude_completion: &ClaudeCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
     // Date when version was available
     // url to call anthropic
@@ -338,7 +338,7 @@ mod tests {
     use serial_test::serial;
 
     async fn claude(content: Vec<ClaudeMessage>) {
-        match call_cluade(content).await {
+        match call_claude(content).await {
             Ok(ret) => { println!("{ret}"); assert!(true) },
             Err(e) => { println!("{e}"); assert!(false) },
         }

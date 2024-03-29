@@ -3,9 +3,15 @@
 LATEST:
 -------
 
-0.1.5: Tidied up, refactored, common functionality over multiple LLMs created. Gemini and GPT working, Claude next
+0.1.5: Tidied up, refactored, common functionality over multiple LLMs created. Gemini and GPT working, Claude next.
+
 0.1.6: Anthropic Claude added. Good quality answers but seems to get Overloaded/Rate Limited.
-0.1.8: Improved remote error detection and handling
+
+0.1.8: Improved remote error detection and handling.
+
+0.1.9: Add Mistral. This will be the extent of the remote interfaces for now, contact author if you need more. May contemplate making Llama available locally too.
+
+Next, apart from any refactoring, will be a web interfacei, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). What is the demand?
 
 Introduction
 ------------

@@ -19,4 +19,6 @@ export CLAUDE_HIGH_MODEL=claude-3-opus-20240229
 export CLAUDE_URL=https://api.anthropic.com/v1/messages
 export CLAUDE_VERSION=2023-06-01
 
-
+export MISTRAL_API_KEY=HjDBtB6jj3OdRHm1DeBbTC9PyMuUEh70
+export MISTRAL_MODEL=mistral-medium
+export MISTRAL_URL=https://api.mistral.ai/v1/chat/completions

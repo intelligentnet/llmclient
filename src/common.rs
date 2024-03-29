@@ -8,9 +8,11 @@ pub enum LlmType  {
     GEMINI,
     GPT,
     CLAUDE,
+    MISTRAL,
     GEMINI_ERROR,
     GPT_ERROR,
-    CLAUDE_ERROR
+    CLAUDE_ERROR,
+    MISTRAL_ERROR,
 }
 
 pub type Triple = (usize, usize, usize);
@@ -21,9 +23,11 @@ impl std::fmt::Display for LlmType {
             LlmType::GEMINI => write!(f, "GEMINI"),
             LlmType::GPT => write!(f, "GPT"),
             LlmType::CLAUDE => write!(f, "CLAUDE"),
+            LlmType::MISTRAL => write!(f, "MISTRAL"),
             LlmType::GEMINI_ERROR => write!(f, "GEMINI_ERROR"),
             LlmType::GPT_ERROR => write!(f, "GPT_ERROR"),
             LlmType::CLAUDE_ERROR => write!(f, "CLAUDE_ERROR"),
+            LlmType::MISTRAL_ERROR => write!(f, "MISTRAL_ERROR"),
         }
     }
 }

@@ -39,6 +39,7 @@ impl GptCompletion {
         if !system.is_empty() {
             messages.push(GptMessage { role: "system".into(), content: system.into() });
         }
+
         user.iter()
             .enumerate()
             .for_each(|(i, c)| {
@@ -291,27 +292,30 @@ impl Default for Usage {
     }
 }
 
-// Call Large Language Model (i.e. GPT-4)
+/// Call GPT with some messages
 pub async fn call_gpt(messages: Vec<GptMessage>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_gpt_all(messages, 0.2, false).await
 }
 
+/// Call GPT with some messages and option for Json
 pub async fn call_gpt_json(messages: Vec<GptMessage>, is_json: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_gpt_all(messages, 0.2, is_json).await
 }
 
+/// Call GPT with some messages and temperature
 pub async fn call_gpt_temperature(messages: Vec<GptMessage>, temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_gpt_all(messages, temperature, false).await
 }
 
+/// Call GPT with some messages, option for Json and temperature
 pub async fn call_gpt_all(messages: Vec<GptMessage>, temperature: f32, is_json: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     // Create chat completion
-
     let gpt_completion = GptCompletion::new(messages, temperature, is_json);
 
     call_gpt_completion(&gpt_completion).await
 }
 
+/// Call Claude with pre-assembled completion
 pub async fn call_gpt_completion(gpt_completion: &GptCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
     // Confirm endpoint
