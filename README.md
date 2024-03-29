@@ -1,4 +1,4 @@
-#LLM Rust Client for Google Gemini, OpenAI GPT and Anthropic Claude
+LLM Rust Client for Google Gemini, OpenAI GPT, Anthropic Claude and Mistral
 
 LATEST:
 -------
