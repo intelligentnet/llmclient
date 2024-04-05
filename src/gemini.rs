@@ -8,6 +8,7 @@ use stemplate::Template;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage, LlmError};
+use crate::gpt::GptMessage;
 
 // Input structures
 // Chat
@@ -121,7 +122,6 @@ impl LlmCompletion for GeminiCompletion {
     }
 }
 
-
 /// This is the primary structure for loading a call. See implementation.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +149,14 @@ impl Content {
     /// Supply file data for previously supplied file
     pub fn file(role: &str, mime_type: &str, file: &str) -> Vec<Self> {
         vec![Self { role: role.into(), parts: vec![Part::file_data(mime_type, file)] }]
+    }
+
+    pub fn message_to_content(messages: &[GptMessage]) -> Vec<Self> {
+        let parts: Vec<Part> = messages.iter()
+            .map(|m| Part::text(&m.content))
+            .collect();
+
+        vec![Self::many("user", parts)]
     }
 }
 
@@ -598,6 +606,7 @@ pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Res
 
         Ok(LlmReturn::new(LlmType::GEMINI_ERROR, res[0].error.to_string(), res[0].error.to_string(), (0, 0, 0), timing, None, None))
     } else {
+//println!("--- {res}");
         let res: Vec<GeminiResponse> = serde_json::from_str(&res).unwrap();
 
         // Now unpack it

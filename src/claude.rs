@@ -25,7 +25,7 @@ pub struct ClaudeCompletion {
 impl ClaudeCompletion {
     /// Create chat completion
     pub fn new(messages: Vec<ClaudeMessage>, temperature: f32, _is_json: bool) -> Self {
-        let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviornment variables");
+        let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
 
         ClaudeCompletion {
             model,
@@ -39,7 +39,7 @@ impl ClaudeCompletion {
 
     /// Create and call llm by supplying data and common parameters
     pub async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-        let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviornment variables");
+        let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
         let mut messages = Vec::new();
 
         user.iter()
@@ -87,7 +87,7 @@ impl ClaudeCompletion {
 impl Default for ClaudeCompletion {
     /// Create default chat completion
     fn default() -> Self {
-        let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviornment variables");
+        let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
 
         ClaudeCompletion {
             model,
@@ -193,23 +193,26 @@ impl Default for Usage {
     }
 }
 
-// Call Large Language Model
+/// Call Claude with some messages
 pub async fn call_claude(messages: Vec<ClaudeMessage>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_claude_all(messages, 0.2, 4096).await
 }
 
+/// Call Claude with some messages and temperature
 pub async fn call_claude_temperature(messages: Vec<ClaudeMessage>, temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_claude_all(messages, temperature, 4096).await
 }
 
+/// Call Claude with some messages and max_tokens
 pub async fn call_claude_max_tokens(messages: Vec<ClaudeMessage>, max_tokens: usize) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     call_claude_all(messages, 0.2, max_tokens).await
 }
 
+/// Call Claude with some messages, temperature and max_tokens
 pub async fn call_claude_all(messages: Vec<ClaudeMessage>, temperature: f32, max_tokens: usize) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     // Model/version of lln
     let model: String =
-        env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviornment variables");
+        env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
     let smess = extract_role("system", &messages);
     let umess = extract_role("user", &messages);
 
@@ -225,9 +228,9 @@ pub async fn call_claude_all(messages: Vec<ClaudeMessage>, temperature: f32, max
     call_claude_completion(&claude_completion).await
 }
 
+/// Call Claude with pre-assembled completion
 pub async fn call_claude_completion(claude_completion: &ClaudeCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
-    // Date when version was available
     // url to call anthropic
     let url: String =
         env::var("CLAUDE_URL").expect("CLAUDE_URL not found in environment variables");
@@ -295,6 +298,7 @@ pub async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
     // Extract API Key information
     let api_key: String =
         env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY not found in environment variables");
+    // Date when version was available
     let version: String =
         env::var("CLAUDE_VERSION").expect("CLAUDE_VERSION not found in environment variables");
 

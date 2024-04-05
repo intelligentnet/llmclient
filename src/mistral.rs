@@ -23,7 +23,7 @@ pub struct MistralCompletion {
 impl MistralCompletion {
     /// Create chat completion
     pub fn new(messages: Vec<MistralMessage>, temperature: f32, max_tokens: usize, _is_json: bool) -> Self {
-        let model: String = env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviornment variables");
+        let model: String = env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviroment variables");
 
         MistralCompletion {
             model,
@@ -35,7 +35,7 @@ impl MistralCompletion {
 
     /// Create and call llm by supplying data and common parameters
     pub async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-        let model: String = env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviornment variables");
+        let model: String = env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviroment variables");
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -86,7 +86,7 @@ impl MistralCompletion {
 impl Default for MistralCompletion {
     /// Create default chat completion
     fn default() -> Self {
-        let model: String = env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviornment variables");
+        let model: String = env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviroment variables");
 
         MistralCompletion {
             model,
@@ -218,7 +218,7 @@ pub async fn call_mistral_completion(mistral_completion: &MistralCompletion) -> 
     let start = std::time::Instant::now();
     // Endpoint
     let url: String =
-        env::var("MISTRAL_URL").expect("MISTRAL_URL not found in enviornment variables");
+        env::var("MISTRAL_URL").expect("MISTRAL_URL not found in enviroment variables");
 
     let client = get_client().await?;
 
@@ -273,7 +273,7 @@ pub async fn call_mistral_completion(mistral_completion: &MistralCompletion) -> 
 pub async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
     // Extract API Key information
     let api_key: String =
-        env::var("MISTRAL_API_KEY").expect("MISTRAL_API_KEY not found in enviornment variables");
+        env::var("MISTRAL_API_KEY").expect("MISTRAL_API_KEY not found in enviroment variables");
 
     // Create headers
     let mut headers: HeaderMap = HeaderMap::new();

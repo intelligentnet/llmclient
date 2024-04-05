@@ -11,6 +11,8 @@ LATEST:
 
 0.1.9: Add Mistral. This will be the extent of the remote interfaces for now, contact author if you need more. May contemplate making Llama available locally too.
 
+0.1.10 Added Groq. This uses the Mixtral open source model (recommended) and LLama models with a look alike OpenAI interface. It is freely available and just requires an API key. Very fast. Up and running in a few minutes, cost free.
+
 Next, apart from any refactoring, will be a web interfacei, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). What is the demand?
 
 Introduction
