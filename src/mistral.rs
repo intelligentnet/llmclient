@@ -4,7 +4,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::env;
 use serde_derive::{Deserialize, Serialize};
-use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage, LlmError};
+use crate::common::*;
 use crate::gpt::GptMessage as MistralMessage;
 
 // Input structures
@@ -220,7 +220,7 @@ pub async fn call_mistral_completion(mistral_completion: &MistralCompletion) -> 
     let url: String =
         env::var("MISTRAL_URL").expect("MISTRAL_URL not found in enviroment variables");
 
-    let client = get_client().await?;
+    let client = get_mistral_client().await?;
 
     // Extract API Response
     let res = client
@@ -270,7 +270,7 @@ pub async fn call_mistral_completion(mistral_completion: &MistralCompletion) -> 
     }
 }
 
-pub async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
+async fn get_mistral_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
     // Extract API Key information
     let api_key: String =
         env::var("MISTRAL_API_KEY").expect("MISTRAL_API_KEY not found in enviroment variables");
@@ -278,12 +278,6 @@ pub async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
     // Create headers
     let mut headers: HeaderMap = HeaderMap::new();
 
-    // We would like json
-    headers.insert(
-        "Content-Type",
-        HeaderValue::from_str("appication/json")
-            .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?,
-    );
     // Create api key header
     headers.insert(
         "Authorization",
@@ -291,16 +285,7 @@ pub async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
             .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?,
     );
 
-    // Create client
-    let client: Client = Client::builder()
-        .user_agent("TargetR")
-        .timeout(std::time::Duration::new(90, 0))
-        //.gzip(true)
-        .default_headers(headers)
-        .build()
-        .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?;
-
-    Ok(client)
+    get_client(headers).await
 }
 
 #[cfg(test)]

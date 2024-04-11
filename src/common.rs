@@ -1,6 +1,8 @@
 use std::pin::Pin;
 use serde::ser::StdError;
 use serde_derive::Deserialize;
+use reqwest::Client;
+use reqwest::header::{HeaderMap, HeaderValue};
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone)]
@@ -157,3 +159,24 @@ impl std::fmt::Display for LlmErrorMessage {
         write!(f, "message: {}", self.message)
     }
 }
+
+pub async fn get_client(mut headers: HeaderMap) -> Result<Client, Box<dyn std::error::Error + Send>> {
+    // We would like json
+    headers.insert(
+        "Content-Type",
+        HeaderValue::from_str("appication/json; charset=utf-8")
+            .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?,
+    );
+
+    // Create client
+    let client: Client = Client::builder()
+        .user_agent("TargetR")
+        .timeout(std::time::Duration::new(120, 0))
+        //.gzip(true)
+        .default_headers(headers)
+        .build()
+        .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?;
+
+    Ok(client)
+}
+

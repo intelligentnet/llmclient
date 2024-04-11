@@ -1,19 +1,13 @@
 ## Can be flaky
-#export GEMINI_REGION=us-central1
-export GEMINI_REGION=us-west4
+export GEMINI_REGION=us-central1
+#export GEMINI_REGION=us-west4
 export GEMINI_PROJECT_ID=<my application>
-export GEMINI_MODEL=gemini-pro
+export GEMINI_MODEL=gemini-1.0-pro-002
 export GEMINI_URL='https://${GEMINI_REGION}-aiplatform.googleapis.com/v1/projects/${GEMINI_PROJECT_ID}/locations/${GEMINI_REGION}/publishers/google/models/${GEMINI_VERSION}:streamGenerateContent'
 
 export OPENAI_API_KEY=<Open AI API key>
-export GPT_MODEL=gpt-4-turbo-preview
+export GPT_MODEL=gpt-4-turbo
 export GPT_CHAT_URL=https://api.openai.com/v1/chat/completions
-
-#export GPT_IMAGE_VERSION=dall-e-3
-#export GPT_IMAGE_URL=https://api.openai.com/v1/images/generations
-
-#export GPT_EMBEDDING_VERSION=text-embedding-3-small
-#export GPT_EMBEDDING_URL=https://api.openai.com/v1/embeddings
 
 export ANTHROPIC_API_KEY=<Athropic API key>
 export CLAUDE_MODEL=claude-3-opus-20240229
@@ -22,7 +16,8 @@ export CLAUDE_URL=https://api.anthropic.com/v1/messages
 export CLAUDE_VERSION=2023-06-01
 
 export MISTRAL_API_KEY=<Mistral API key>
-export MISTRAL_MODEL=mistral-medium
+#export MISTRAL_MODEL=mistral-medium
+export MISTRAL_MODEL=mistral-large-latest
 export MISTRAL_URL=https://api.mistral.ai/v1/chat/completions
 
 export GROQ_API_KEY=<Groq API keys>

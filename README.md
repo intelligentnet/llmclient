@@ -3,15 +3,7 @@ LLM Rust Client for Google Gemini, OpenAI GPT, Anthropic Claude and Mistral
 LATEST:
 -------
 
-0.1.5: Tidied up, refactored, common functionality over multiple LLMs created. Gemini and GPT working, Claude next.
-
-0.1.6: Anthropic Claude added. Good quality answers but seems to get Overloaded/Rate Limited.
-
-0.1.8: Improved remote error detection and handling.
-
-0.1.9: Add Mistral. This will be the extent of the remote interfaces for now, contact author if you need more. May contemplate making Llama available locally too.
-
-0.1.10 Added Groq. This uses the Mixtral open source model (recommended) and LLama models with a look alike OpenAI interface. It is freely available and just requires an API key. Very fast. Up and running in a few minutes, cost free.
+0.1.11 Fix RECITATION bug in gemini-1.0-pro-002
 
 Next, apart from any refactoring, will be a web interfacei, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). What is the demand?
 
@@ -28,12 +20,14 @@ The objective is to have a transparent interface to the major vendors. Then moni
 Getting Started
 ---------------
 
-For you to do to get started :
+For you to do to get started (Google) :
 -	Create a Google API account
 -	Create Google application
 -	Install gcload locally
 -	For OpenAI GPT create an API account and obtain a key
 -	Edit the env file and run: . ./env in shell
+
+For other providers, follow API instructions which generally means obtaining a key.
 
 Testing this is tricky and there are many variations of possible responses (assuming Google have not changed their interface). Tests will pass providing a call is successfully made to Gemini and does not return a Error. There may be a number of internal reasons for it to fail (finish not 'STOP', safety resons etc). To show more context call test with the --nocapture flag.
 
@@ -44,14 +38,7 @@ TODO
 - Add 'function calling'
 - If required add more helper functions to help unpack data from each vendor
 - Fix bugs that will inevitably come up as this interface matures
-- Keep up with Google
-
-Added
------
-
-- 'System' Data, to set context more like OpenAI and Anthropic
-
-Please read the `API documentation` https://docs.rs/llmclient/
+- Keep up with Google and others
 
 An example dialogue:
 -------------------

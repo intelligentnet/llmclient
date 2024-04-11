@@ -7,7 +7,7 @@ use serde_derive::{Deserialize, Serialize};
 use stemplate::Template;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use crate::common::{LlmType, LlmReturn, Triple, LlmCompletion, LlmMessage, LlmError};
+use crate::common::*;
 use crate::gpt::GptMessage;
 
 // Input structures
@@ -429,7 +429,7 @@ pub struct GeminiResponse {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Candidate {
-    pub content: ResponseContent,
+    pub content: Option<ResponseContent>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -582,7 +582,7 @@ pub async fn call_gemini_system_all(system: Option<&str>, contents: Vec<Content>
 pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
     let url: String = Template::new("${GEMINI_URL}").render_env();
-    let client = get_client().await?;
+    let client = get_gemini_client().await?;
 
     // Extract Response
     let res = client
@@ -612,8 +612,12 @@ pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Res
         // Now unpack it
         let text: String = res.iter()
             .map(|gr| gr.candidates.iter().map(|c| {
-                if let Some(parts) = &c.content.parts {
-                    parts.iter().map(|p| p.text.trim().to_owned() + " ").collect::<String>()
+                if let Some(content) = &c.content {
+                    if let Some(parts) = &content.parts {
+                        parts.iter().map(|p| p.text.trim().to_owned() + " ").collect::<String>()
+                    } else {
+                        "".into()
+                    }
                 } else {
                     "".into()
                 }
@@ -675,7 +679,7 @@ pub fn add_system_content(system: Option<&str>, contents: Vec<Content>) -> Vec<C
     }
 }
 
-async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
+async fn get_gemini_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
     // Extract API Key information
     let output = Command::new("gcloud")
         .arg("auth")
@@ -688,12 +692,6 @@ async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
     // Create headers
     let mut headers: HeaderMap = HeaderMap::new();
 
-    // We would like json
-    headers.insert(
-        "Content-Type",
-        HeaderValue::from_str("appication/json; charset=utf-8")
-            .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?,
-    );
     // Create api key header
     headers.insert(
         "Authorization",
@@ -701,16 +699,7 @@ async fn get_client() -> Result<Client, Box<dyn std::error::Error + Send>> {
             .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?,
     );
 
-    // Create client
-    let client: Client = Client::builder()
-        .user_agent("TargetR")
-        .timeout(std::time::Duration::new(120, 0))
-        //.gzip(true)
-        .default_headers(headers)
-        .build()
-        .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?;
-
-    Ok(client)
+    get_client(headers).await
 }
 
 #[cfg(test)]
