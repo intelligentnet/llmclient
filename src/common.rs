@@ -1,8 +1,11 @@
-use std::pin::Pin;
-use serde::ser::StdError;
 use serde_derive::Deserialize;
 use reqwest::Client;
 use reqwest::header::{HeaderMap, HeaderValue};
+use crate::gemini::GeminiCompletion;
+use crate::gpt::GptCompletion;
+use crate::mistral::MistralCompletion;
+use crate::claude::ClaudeCompletion;
+use crate::groq::GroqCompletion;
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone)]
@@ -78,10 +81,13 @@ impl std::fmt::Display for LlmReturn {
 }
 
 pub trait LlmCompletion {
-    /*
-    /// Create and call llm by supplying data and common parameters
-    fn call(system: &str, user: &Vec<&str>, temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>>;
-    */
+    /// Set temperature
+    fn set_temperature(&mut self, temperature: f32);
+
+    /// If applicable set output to be json. Hint in prompt still necessary.
+    fn set_json(&mut self, _is_json: bool) {
+        // not applicable for all models
+    }
 
     /// Supply single role and single part text
     fn add_text(&mut self, role: &str, content: &str);
@@ -109,9 +115,8 @@ pub trait LlmCompletion {
 
     // Set content in precreated completion
     //fn set_content(&mut self, content: Vec<Box<dyn LlmMessage>>);
-
-    /// Default call to LLM so trait can be used for simple calls
-    fn call_llm(&'static self) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + Send + 'static)>>> + Send + 'static)>>;
+ 
+    fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> impl std::future::Future<Output = Result<LlmReturn, Box<dyn std::error::Error + Send>>> + Send;
 }
 
 pub trait LlmMessage {
@@ -160,6 +165,147 @@ impl std::fmt::Display for LlmErrorMessage {
     }
 }
 
+/// Call named LLM with common parameters supplied
+pub async fn call_llm(llm: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    match llm {
+        "google" | "gemini" => {
+            GeminiCompletion::call(system, user, temperature, is_json, is_chat).await
+        },
+        "openai" | "gpt" => {
+            GptCompletion::call(system, user, temperature, is_json, is_chat).await
+        },
+        "mistral" => {
+            MistralCompletion::call(system, user, temperature, is_json, is_chat).await
+        },
+        "anthropic" | "claude" => {
+            ClaudeCompletion::call(system, user, temperature, is_json, is_chat).await
+        },
+        _ => {
+            GroqCompletion::call(system, user, temperature, is_json, is_chat).await
+        },
+    }
+}
+
+/// Call default (see LLM_TO_USE env var) LLM with common parameters supplied
+pub async fn call(system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let llm: &str = &std::env::var("LLM_TO_USE").map_err(|_| "groq".to_string()).unwrap();
+
+    call_llm(llm, system, user, temperature, is_json, is_chat).await
+}
+
+/// Call single shot default LLM with default values for parameters supplied
+pub async fn single_call(system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call(system, user, 0.2, false, false).await
+}
+
+/// Call single shot default LLM with default values for parameters supplied
+/// Should return JSON
+pub async fn single_call_json(system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call(system, user, 0.2, true, false).await
+}
+
+/// Call chat default LLM with default values for parameters supplied
+pub async fn chat_call(system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call(system, user, 0.2, false, true).await
+}
+
+/// Call chat default LLM with default values for parameters supplied
+/// Should return JSON
+pub async fn chat_call_json(system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call(system, user, 0.2, true, true).await
+}
+
+/// Call single shot default LLM with temperature supplied
+pub async fn single_call_temperature(system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call(system, user, temperature, false, false).await
+}
+
+/// Call single shot default LLM with temperature supplied
+/// Should return JSON
+pub async fn single_call_json_temperature(system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call(system, user, temperature, true, false).await
+}
+
+/// Call chat default LLM with temperature supplied
+pub async fn chat_call_temperature(system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call(system, user, temperature, false, true).await
+}
+
+/// Call chat default LLM with temperature supplied
+/// Should return JSON
+pub async fn chat_call_json_temperature(system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call(system, user, temperature, true, true).await
+}
+
+/// Call single shot named LLM with default values for parameters supplied
+pub async fn single_call_llm(llm: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm(llm, system, user, 0.2, false, false).await
+}
+
+/// Call single shot named LLM with default values for parameters supplied
+/// Should return JSON
+pub async fn single_call_json_llm(llm: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm(llm, system, user, 0.2, true, false).await
+}
+
+/// Call chat named LLM with default values for parameters supplied
+pub async fn chat_call_llm(llm: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm(llm, system, user, 0.2, false, true).await
+}
+
+/// Call chat named LLM with default values for parameters supplied
+/// Should return JSON
+pub async fn chat_call_json_llm(llm: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm(llm, system, user, 0.2, true, true).await
+}
+
+/// Call single shot named LLM with temperature supplied
+pub async fn single_call_temperature_llm(llm: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm(llm, system, user, temperature, false, false).await
+}
+
+/// Call single shot named LLM with temperature supplied
+/// Should return JSON
+pub async fn single_call_json_temperature_llm(llm: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm(llm, system, user, temperature, true, false).await
+}
+
+/// Call chat named LLM with temperature supplied
+pub async fn chat_call_temperature_llm(llm: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm(llm, system, user, temperature, false, true).await
+}
+
+/// Call chat named LLM with temperature supplied
+/// Should return JSON
+pub async fn chat_call_json_temperature_llm(llm: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm(llm, system, user, temperature, true, true).await
+}
+
+/// Common HTTP client with header setup
 pub async fn get_client(mut headers: HeaderMap) -> Result<Client, Box<dyn std::error::Error + Send>> {
     // We would like json
     headers.insert(
@@ -179,4 +325,3 @@ pub async fn get_client(mut headers: HeaderMap) -> Result<Client, Box<dyn std::e
 
     Ok(client)
 }
-

@@ -3,9 +3,9 @@ LLM Rust Client for Google Gemini, OpenAI GPT, Anthropic Claude and Mistral
 LATEST:
 -------
 
-0.1.11 Fix RECITATION bug in gemini-1.0-pro-002
+0.2.0	Interface change. Various helper functions and default LLM introduced
 
-Next, apart from any refactoring, will be a web interfacei, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). What is the demand?
+Next, apart from any refactoring, will be a web interface, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). What is the demand?
 
 Introduction
 ------------

@@ -2,7 +2,8 @@
 export GEMINI_REGION=us-central1
 #export GEMINI_REGION=us-west4
 export GEMINI_PROJECT_ID=<my application>
-export GEMINI_MODEL=gemini-1.0-pro-002
+export GEMINI_MODEL=gemini-1.0-pro
+#export GEMINI_MODEL=gemini-1.5-pro-preview-0409
 export GEMINI_URL='https://${GEMINI_REGION}-aiplatform.googleapis.com/v1/projects/${GEMINI_PROJECT_ID}/locations/${GEMINI_REGION}/publishers/google/models/${GEMINI_VERSION}:streamGenerateContent'
 
 export OPENAI_API_KEY=<Open AI API key>
@@ -23,3 +24,6 @@ export MISTRAL_URL=https://api.mistral.ai/v1/chat/completions
 export GROQ_API_KEY=<Groq API keys>
 export GROQ_CHAT_URL=https://api.groq.com/openai/v1/chat/completions
 export GROQ_MODEL=mixtral-8x7b-32768
+
+# Default LLM to use
+export LLM_TO_USE=groq

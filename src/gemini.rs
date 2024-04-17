@@ -1,5 +1,3 @@
-use std::pin::Pin;
-use serde::ser::StdError;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::process::Command;
@@ -9,6 +7,7 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use crate::common::*;
 use crate::gpt::GptMessage;
+use crate::common::LlmCompletion;
 
 // Input structures
 // Chat
@@ -29,32 +28,6 @@ impl GeminiCompletion {
     pub fn new(contents: Vec<Content>, safety_settings: Vec<SafetySettings>, generation_config: GenerationConfig) -> Self {
         GeminiCompletion { contents, tools: None, safety_settings, generation_config }
     }
-
-    /// Create and call llm by supplying data and common parameters
-    pub async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-        let mut contents = Vec::new();
-
-        if !system.is_empty() {
-            contents.push(Content::text("user", system));
-            contents.push(Content::text("model", "Understood"));
-        }
-        user.iter()
-            .enumerate()
-            .for_each(|(i, c)| {
-                let role = if !is_chat || i % 2 == 0 { "user" } else { "model" };
-
-                contents.push(Content::text(role, c));
-            });
-
-        let completion = GeminiCompletion {
-            contents,
-            tools: None,
-            safety_settings: SafetySettings::low_block(),
-            generation_config: GenerationConfig::new(Some(temperature), None, None, 1, Some(8192), None)
-        };
-
-        call_gemini_completion(&completion).await
-    }
 }
 
 impl Default for GeminiCompletion {
@@ -70,6 +43,11 @@ impl Default for GeminiCompletion {
 }
 
 impl LlmCompletion for GeminiCompletion {
+    /// Set temperature
+    fn set_temperature(&mut self, temperature: f32) {
+        self.generation_config.temperature = Some(temperature);
+    }
+
     /// Add single role and single part text
     fn add_text(&mut self, role: &str, text: &str) {
         self.contents.push(Content::text(role, text));
@@ -115,10 +93,30 @@ impl LlmCompletion for GeminiCompletion {
     //    self.contents = content.iter().map(|c| *(&c as &Content)).collect();
     //}
 
-    /// Default call to LLM so trait can be used for simple calls
-    //fn call_llm(&self) -> Result<impl std::future::Future<Output=LlmReturn>, Box<dyn std::error::Error + Send>> {
-    fn call_llm(&'static self) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + std::marker::Send + 'static)>>> + std::marker::Send + 'static)>> {
-        Box::pin(call_gemini_completion(self))
+    /// Create and call llm by supplying data and common parameters
+    async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        let mut contents = Vec::new();
+
+        if !system.is_empty() {
+            contents.push(Content::text("user", system));
+            contents.push(Content::text("model", "Understood"));
+        }
+        user.iter()
+            .enumerate()
+            .for_each(|(i, c)| {
+                let role = if !is_chat || i % 2 == 0 { "user" } else { "model" };
+
+                contents.push(Content::text(role, c));
+            });
+
+        let completion = GeminiCompletion {
+            contents,
+            tools: None,
+            safety_settings: SafetySettings::low_block(),
+            generation_config: GenerationConfig::new(Some(temperature), None, None, 1, Some(8192), None)
+        };
+
+        call_gemini_completion(&completion).await
     }
 }
 
@@ -736,5 +734,19 @@ mod tests {
         let messages =
             vec![Content::text("user", "How many brains does an octopus have, when they have been injured and lost a leg?")];
         gemini(messages).await;
+    }
+    #[tokio::test]
+    async fn test_call_gemini_dialogue() {
+        let system = "Use a Scottish accent to answer questions";
+        let mut messages = 
+            vec!["How many brains does an octopus have, when they have been injured and lost a leg?".to_string()];
+        let res = GeminiCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
+
+        messages.push(res.unwrap().to_string());
+        messages.push("Is a cuttle fish similar?".to_string());
+
+        let res = GeminiCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
     }
 }

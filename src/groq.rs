@@ -1,5 +1,3 @@
-use std::pin::Pin;
-use serde::ser::StdError;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::env;
@@ -34,43 +32,12 @@ impl GroqCompletion {
         }
     }
 
-    /// Create and call llm by supplying data and common parameters
-    pub async fn call(system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
-        let model: String = env::var("GROQ_MODEL").expect("GROQ_MODEL not found in enviroment variables");
-        let mut messages = Vec::new();
-
-        if !system.is_empty() {
-            messages.push(GroqMessage { role: "system".into(), content: system.into() });
-        }
-
-        user.iter()
-            .enumerate()
-            .for_each(|(i, c)| {
-                let role = if !is_chat || i % 2 == 0 { "user" } else { "assistant" };
-
-                messages.push(GroqMessage { role: role.into(), content: c.to_string() });
-            });
-
-        let completion = GroqCompletion {
-            model,
-            messages,
-            temperature,
-            response_format: ResponseFormat::new(is_json)
-        };
-
-        call_groq_completion(&completion).await
-    }
-
     pub fn set_model(&mut self, model: &str) {
         self.model = model.into();
     }
 
     pub fn set_response_format(&mut self, response_format: &ResponseFormat) {
         self.response_format = response_format.clone();
-    }
-
-    pub fn set_temperature(&mut self, temperature: f32) {
-        self.temperature = temperature;
     }
 
     /// Add a single new message
@@ -99,6 +66,16 @@ impl Default for GroqCompletion {
 }
 
 impl LlmCompletion for GroqCompletion {
+    /// Set temperature
+    fn set_temperature(&mut self, temperature: f32) {
+        self.temperature = temperature;
+    }
+
+    /// Set output to be json. Hint in prompt still necessary.
+    fn set_json(&mut self, is_json: bool) {
+        self.response_format = ResponseFormat::new(is_json);
+    }
+
     /// Add single role and single part text
     fn add_text(&mut self, role: &str, text: &str) {
         self.messages.push(GroqMessage::text(role, text));
@@ -144,18 +121,33 @@ impl LlmCompletion for GroqCompletion {
     //    self.messages = content;
     //}
 
-    /*
-    /// Create and Call LLM
-    fn create_call_llm(system: &Vec<&str>, user: &Vec<&str>, temperature: f32, is_json: bool, is_chat: bool) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + Send + 'static)>>> + Send + 'static)>> {
+    /// Create and call llm by supplying data and common parameters
+    async fn call(system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        let model: String = env::var("GROQ_MODEL").expect("GROQ_MODEL not found in enviroment variables");
+        let mut messages = Vec::new();
 
-        Box::pin(call_groq_completion(llm))
-    }
-    */
+        if !system.is_empty() {
+            messages.push(GroqMessage { role: "system".into(), content: system.into() });
+        }
 
-    /// Default call to LLM so trait can be used for simple calls
-    fn call_llm(&'static self) -> Pin<Box<(dyn futures::Future<Output = Result<LlmReturn, Box<(dyn StdError + Send + 'static)>>> + Send + 'static)>> {
-        Box::pin(call_groq_completion(self))
+        user.iter()
+            .enumerate()
+            .for_each(|(i, c)| {
+                let role = if !is_chat || i % 2 == 0 { "user" } else { "assistant" };
+
+                messages.push(GroqMessage { role: role.into(), content: c.to_string() });
+            });
+
+        let completion = GroqCompletion {
+            model,
+            messages,
+            temperature,
+            response_format: ResponseFormat::new(is_json)
+        };
+
+        call_groq_completion(&completion).await
     }
+
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -360,5 +352,19 @@ mod tests {
         let messages = 
             vec![GroqMessage::text("user", "How many brains does an octopus have, when they have been injured and lost a leg?")];
         groq(messages).await;
+    }
+    #[tokio::test]
+    async fn test_call_groq_dialogue() {
+        let system = "Use a Scottish accent to answer questions";
+        let mut messages = 
+            vec!["How many brains does an octopus have, when they have been injured and lost a leg?".to_string()];
+        let res = GroqCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
+
+        messages.push(res.unwrap().to_string());
+        messages.push("Is a cuttle fish similar?".to_string());
+
+        let res = GroqCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
     }
 }

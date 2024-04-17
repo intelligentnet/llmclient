@@ -8,6 +8,7 @@ use llmclient::gpt::GptCompletion;
 use llmclient::claude::ClaudeCompletion;
 use llmclient::mistral::MistralCompletion;
 use llmclient::groq::GroqCompletion;
+use llmclient::common::LlmCompletion;
 
 #[tokio::main]
 async fn main() {
