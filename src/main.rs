@@ -3,12 +3,7 @@ use crossterm::{
     ExecutableCommand,
 };
 use std::io::{stdin, stdout};
-use llmclient::gemini::GeminiCompletion;
-use llmclient::gpt::GptCompletion;
-use llmclient::claude::ClaudeCompletion;
-use llmclient::mistral::MistralCompletion;
-use llmclient::groq::GroqCompletion;
-use llmclient::common::LlmCompletion;
+use llmclient::common::call_llm;
 
 #[tokio::main]
 async fn main() {
@@ -80,11 +75,11 @@ async fn main() {
         prompts.push(prompt);
 
         let res = match llm {
-            0 => GeminiCompletion::call(&system, &prompts, 0.2, false, true).await,
-            1 => GptCompletion::call(&system, &prompts, 0.2, false, true).await,
-            2 => ClaudeCompletion::call(&system, &prompts, 0.2, false, true).await,
-            3 => MistralCompletion::call(&system, &prompts, 0.2, false, true).await,
-            4 => GroqCompletion::call(&system, &prompts, 0.2, false, true).await,
+            0 => call_llm("gemini", &system, &prompts, 0.2, false, true).await,
+            1 => call_llm("gpt", &system, &prompts, 0.2, false, true).await,
+            2 => call_llm("claude", &system, &prompts, 0.2, false, true).await,
+            3 => call_llm("mistral", &system, &prompts, 0.2, false, true).await,
+            4 => call_llm("groq", &system, &prompts, 0.2, false, true).await,
             _ => todo!()
         };
 
