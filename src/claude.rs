@@ -118,6 +118,12 @@ impl LlmCompletion for ClaudeCompletion {
     /// Create and call llm by supplying data and common parameters
     async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let model: String = env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
+
+        Self::call_model(&model, system, user, temperature, _is_json, is_chat).await
+    }
+
+    /// Create and call llm by supplying data and common parameters
+    async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         user.iter()
@@ -129,7 +135,7 @@ impl LlmCompletion for ClaudeCompletion {
             });
 
         let completion = ClaudeCompletion {
-            model,
+            model: model.into(),
             system: if system.is_empty() { None } else { Some(system.to_string()) },
             messages,
             temperature,
@@ -342,7 +348,7 @@ mod tests {
         claude(messages).await;
     }
     #[tokio::test]
-    //#[serial]
+    #[serial]
     async fn test_call_claude_poem() {
         let messages = 
             vec![ClaudeMessage::text("user", "Write a creative poem about the interplay of artificial intelligence and the human spirit and provide citations")];
@@ -356,6 +362,7 @@ mod tests {
         claude(messages).await;
     }
     #[tokio::test]
+    #[serial]
     async fn test_call_claude_dialogue() {
         let system = "Use a Scottish accent to answer questions";
         let mut messages = 
@@ -367,6 +374,13 @@ mod tests {
         messages.push("Is a cuttle fish similar?".to_string());
 
         let res = ClaudeCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
+    }
+    #[tokio::test]
+    async fn test_call_claude_dialogue_model() {
+        let model: String = std::env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
+        let messages = vec!["Hello".to_string()];
+        let res = ClaudeCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
     }
 }

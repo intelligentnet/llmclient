@@ -1,9 +1,12 @@
 ## Can be flaky
 export GEMINI_REGION=us-central1
+#export GEMINI_REGION=europe-west1
 #export GEMINI_REGION=us-west4
 export GEMINI_PROJECT_ID=<my application>
 export GEMINI_MODEL=gemini-1.0-pro
-#export GEMINI_MODEL=gemini-1.5-pro-preview-0409
+#export GEMINI_MODEL=gemini-1.5-pro
+# Very small quota
+#export GEMINI_MODEL=gemini-1.5-pro-preview-0514
 export GEMINI_URL='https://${GEMINI_REGION}-aiplatform.googleapis.com/v1/projects/${GEMINI_PROJECT_ID}/locations/${GEMINI_REGION}/publishers/google/models/${GEMINI_VERSION}:streamGenerateContent'
 
 export OPENAI_API_KEY=<Open AI API key>

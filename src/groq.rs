@@ -124,6 +124,12 @@ impl LlmCompletion for GroqCompletion {
     /// Create and call llm by supplying data and common parameters
     async fn call(system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let model: String = env::var("GROQ_MODEL").expect("GROQ_MODEL not found in enviroment variables");
+
+        Self::call_model(&model, system, user, temperature, is_json, is_chat).await
+    }
+
+    /// Create and call llm with model by supplying data and common parameters
+    async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -139,7 +145,7 @@ impl LlmCompletion for GroqCompletion {
             });
 
         let completion = GroqCompletion {
-            model,
+            model: model.into(),
             messages,
             temperature,
             response_format: ResponseFormat::new(is_json)
@@ -365,6 +371,13 @@ mod tests {
         messages.push("Is a cuttle fish similar?".to_string());
 
         let res = GroqCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
+    }
+    #[tokio::test]
+    async fn test_call_groq_dialogue_model() {
+        let model: String = std::env::var("GROQ_MODEL").expect("GROQ_MODEL not found in enviroment variables");
+        let messages = vec!["Hello".to_string()];
+        let res = GroqCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
     }
 }

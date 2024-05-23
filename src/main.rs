@@ -3,20 +3,30 @@ use crossterm::{
     ExecutableCommand,
 };
 use std::io::{stdin, stdout};
-use llmclient::common::call_llm;
+use llmclient::common::call_llm_model;
 
 #[tokio::main]
 async fn main() {
-    let mut llm = 0;
+    let mut llm = "4";
+    let mut model = "llama3-70b-8192";
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() <= 1 {
-        highlight("Please supply 1 argument to indicate the LLM to run : 0 = Gemini, 1 = GPT, Claude = 2, Mistral = 3, Groq = 4" );
-        highlight("This run will default to gemini\n\n");
+        highlight("Please supply first argument to indicate the LLM to run : 0 = Gemini, 1 = GPT, Claude = 2, Mistral = 3, Groq = 4");
+        highlight(&format!("This run will default to {llm}\n"));
     } else {
-        llm = args[1].parse::<usize>().unwrap_or_default();
+        llm = &args[1];
     }
 
+    if args.len() <= 2 {
+        highlight("Please supply argument to indicate the model to run");
+        highlight(&format!("This run will default to {model}\n"));
+        highlight("Please ensure model exists and is compatable with llm\n");
+    } else {
+        model = &args[2];
+    }
+
+    highlight(&format!("Running {llm}: {model}\n"));
     highlight("Type multiple lines and then end with ^D [or ^Z on Windows] for answer.");
     highlight("'quit' or 'exit' work too. To clear history 'new' or 'clear'");
     highlight("To show dialogue history 'show' or 'history'");
@@ -75,11 +85,16 @@ async fn main() {
         prompts.push(prompt);
 
         let res = match llm {
-            0 => call_llm("gemini", &system, &prompts, 0.2, false, true).await,
-            1 => call_llm("gpt", &system, &prompts, 0.2, false, true).await,
-            2 => call_llm("claude", &system, &prompts, 0.2, false, true).await,
-            3 => call_llm("mistral", &system, &prompts, 0.2, false, true).await,
-            4 => call_llm("groq", &system, &prompts, 0.2, false, true).await,
+            "0" | "gemini" =>
+                call_llm_model("gemini", model, &system, &prompts, 0.2, false, true).await,
+            "1" | "gpt" =>
+                call_llm_model("gpt", model, &system, &prompts, 0.2, false, true).await,
+            "2" | "claude" =>
+                call_llm_model("claude", model, &system, &prompts, 0.2, false, true).await,
+            "3" | "mistral" =>
+                call_llm_model("mistral", model, &system, &prompts, 0.2, false, true).await,
+            "4" | "groq" =>
+                call_llm_model("groq", model, &system, &prompts, 0.2, false, true).await,
             _ => todo!()
         };
 

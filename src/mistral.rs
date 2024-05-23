@@ -4,7 +4,6 @@ use std::env;
 use serde_derive::{Deserialize, Serialize};
 use crate::common::*;
 use crate::gpt::GptMessage as MistralMessage;
-use crate::common::LlmCompletion;
 
 // Input structures
 // Chat
@@ -114,6 +113,12 @@ impl LlmCompletion for MistralCompletion {
     /// Create and call llm by supplying data and common parameters
     async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let model: String = env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviroment variables");
+
+        Self::call_model(&model, system, user, temperature, _is_json, is_chat).await
+    }
+
+    /// Create and call llm by supplying data and common parameters
+    async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -129,7 +134,7 @@ impl LlmCompletion for MistralCompletion {
             });
 
         let completion = MistralCompletion {
-            model,
+            model: model.into(),
             messages,
             temperature,
             max_tokens: 4096
@@ -332,6 +337,13 @@ mod tests {
         messages.push("Is a cuttle fish similar?".to_string());
 
         let res = MistralCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
+    }
+    #[tokio::test]
+    async fn test_call_mistral_dialogue_model() {
+        let model: String = std::env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviroment variables");
+        let messages = vec!["Hello".to_string()];
+        let res = MistralCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
     }
 }

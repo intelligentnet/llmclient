@@ -113,10 +113,11 @@ pub trait LlmCompletion {
     /// Return String of Object
     fn debug(&self) -> String;
 
-    // Set content in precreated completion
-    //fn set_content(&mut self, content: Vec<Box<dyn LlmMessage>>);
- 
+    /// Create and call llm by supplying data and common parameters
     fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> impl std::future::Future<Output = Result<LlmReturn, Box<dyn std::error::Error + Send>>> + Send;
+
+    /// Create and call llm by supplying model, data and common parameters
+    fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> impl std::future::Future<Output = Result<LlmReturn, Box<dyn std::error::Error + Send>>> + Send;
 }
 
 pub trait LlmMessage {
@@ -165,25 +166,51 @@ impl std::fmt::Display for LlmErrorMessage {
     }
 }
 
-/// Call named LLM with common parameters supplied
-pub async fn call_llm(llm: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+/// Call default named LLM with common parameters supplied
+pub async fn call_llm_model(llm: &str, model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     match llm {
         "google" | "gemini" => {
-            GeminiCompletion::call(system, user, temperature, is_json, is_chat).await
+            GeminiCompletion::call_model(model, system, user, temperature, is_json, is_chat).await
         },
         "openai" | "gpt" => {
-            GptCompletion::call(system, user, temperature, is_json, is_chat).await
+            GptCompletion::call_model(model, system, user, temperature, is_json, is_chat).await
         },
         "mistral" => {
-            MistralCompletion::call(system, user, temperature, is_json, is_chat).await
+            MistralCompletion::call_model(model, system, user, temperature, is_json, is_chat).await
         },
         "anthropic" | "claude" => {
-            ClaudeCompletion::call(system, user, temperature, is_json, is_chat).await
+            ClaudeCompletion::call_model(model, system, user, temperature, is_json, is_chat).await
         },
         _ => {
-            GroqCompletion::call(system, user, temperature, is_json, is_chat).await
+            GroqCompletion::call_model(model, system, user, temperature, is_json, is_chat).await
         },
     }
+}
+
+/// Call default named LLM with common parameters supplied
+pub async fn call_llm(llm: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let model =
+        match llm {
+            "google" | "gemini" => {
+                    std::env::var("GEMINI_MODEL")
+            },
+            "openai" | "gpt" => {
+                    std::env::var("GPT_MODEL")
+            },
+            "mistral" => {
+                    std::env::var("MISTRAL_MODEL")
+            },
+            "anthropic" | "claude" => {
+                    std::env::var("CLAUDE_MODEL")
+            },
+            _ => {
+                    std::env::var("GROQ_MODEL")
+            },
+        };
+
+    let model = model.expect("{llm} MODEL not found in enviroment variables");
+
+    call_llm_model(llm, &model, system, user, temperature, is_json, is_chat).await
 }
 
 /// Call default (see LLM_TO_USE env var) LLM with common parameters supplied
@@ -303,6 +330,62 @@ pub async fn chat_call_json_temperature_llm(llm: &str, system: &str, user: &[Str
     let system = &format!("Return valid JSON only. {system}");
 
     call_llm(llm, system, user, temperature, true, true).await
+}
+
+/// Call single shot named LLM/Model with default values for parameters supplied
+pub async fn single_call_llm_model(llm: &str, model: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm_model(llm, model, system, user, 0.2, false, false).await
+}
+
+/// Call single shot named LLM/Model with default values for parameters supplied
+/// Should return JSON
+pub async fn single_call_json_llm_model(llm: &str, model: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm_model(llm, model, system, user, 0.2, true, false).await
+}
+
+/// Call chat named LLM/Model with default values for parameters supplied
+pub async fn chat_call_llm_model(llm: &str, model: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm_model(llm, model, system, user, 0.2, false, true).await
+}
+
+/// Call chat named LLM/Model with default values for parameters supplied
+/// Should return JSON
+pub async fn chat_call_json_llm_model(llm: &str, model: &str, system: &str, user: &[String]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm_model(llm, model, system, user, 0.2, true, true).await
+}
+
+/// Call single shot named LLM/Model with temperature supplied
+pub async fn single_call_temperature_llm_model(llm: &str, model: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm_model(llm, model, system, user, temperature, false, false).await
+}
+
+/// Call single shot named LLM/Model with temperature supplied
+/// Should return JSON
+pub async fn single_call_json_temperature_llm_model(llm: &str, model: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm_model(llm, model, system, user, temperature, true, false).await
+}
+
+/// Call chat named LLM/Model with temperature supplied
+pub async fn chat_call_temperature_llm_model(llm: &str, model: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+
+    call_llm_model(llm, model, system, user, temperature, false, true).await
+}
+
+/// Call chat named LLM/Model with temperature supplied
+/// Should return JSON
+pub async fn chat_call_json_temperature_llm_model(llm: &str, model: &str, system: &str, user: &[String], temperature: f32) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let system = &format!("Return valid JSON only. {system}");
+
+    call_llm_model(llm, model, system, user, temperature, true, true).await
 }
 
 /// Common HTTP client with header setup

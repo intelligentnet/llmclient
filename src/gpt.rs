@@ -11,6 +11,8 @@ use crate::common::*;
 #[derive(Debug, Serialize, Clone)]
 pub struct GptCompletion {
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<String>,
     pub messages: Vec<GptMessage>,
     pub response_format: ResponseFormat,
     pub temperature: f32,
@@ -23,6 +25,7 @@ impl GptCompletion {
 
         GptCompletion {
             model,
+            tools: None,
             messages,
             temperature,
             response_format: ResponseFormat::new(is_json)
@@ -31,6 +34,10 @@ impl GptCompletion {
 
     pub fn set_model(&mut self, model: &str) {
         self.model = model.into();
+    }
+
+    pub fn set_tools(&mut self, tools: &str) {
+        self.tools = Some(tools.into());
     }
 
     pub fn set_response_format(&mut self, response_format: &ResponseFormat) {
@@ -55,6 +62,7 @@ impl Default for GptCompletion {
 
         GptCompletion {
             model,
+            tools: None,
             messages: Vec::new(),
             temperature: 0.2,
             response_format: ResponseFormat::new(false)
@@ -128,6 +136,12 @@ impl LlmCompletion for GptCompletion {
     /// Create and call llm by supplying data and common parameters
     async fn call(system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let model: String = env::var("GPT_MODEL").expect("GPT_MODEL not found in enviroment variables");
+
+        Self::call_model(&model, system, user, temperature, is_json, is_chat).await
+    }
+ 
+    /// Create and call llm with model by supplying data and common parameters
+    async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -143,7 +157,8 @@ impl LlmCompletion for GptCompletion {
             });
 
         let completion = GptCompletion {
-            model,
+            model: model.into(),
+            tools: None,
             messages,
             temperature,
             response_format: ResponseFormat::new(is_json)
@@ -441,4 +456,12 @@ mod tests {
         let res = GptCompletion::call(&system, &messages, 0.2, false, true).await;
         println!("{res:?}");
     }
+    #[tokio::test]
+    async fn test_call_gpt_dialogue_model() {
+        let model: String = std::env::var("GPT_MODEL").expect("GPT_MODEL not found in enviroment variables");
+        let messages = vec!["Hello".to_string()];
+        let res = GptCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
+        println!("{res:?}");
+    }
+
 }

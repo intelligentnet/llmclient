@@ -5,6 +5,8 @@ LATEST:
 
 0.2.0	Interface change. Various helper functions and default LLM introduced
 
+0.2.1	Addition interface functions to supply model as parameter.
+
 Next, apart from any refactoring, will be a web interface, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). What is the demand?
 
 Introduction

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Client;
 use std::process::Command;
@@ -95,6 +96,13 @@ impl LlmCompletion for GeminiCompletion {
 
     /// Create and call llm by supplying data and common parameters
     async fn call(system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        let model: String = std::env::var("GEMINI_MODEL").expect("GEMINI_MODEL not found in enviroment variables");
+
+        Self::call_model(&model, system, user, temperature, _is_json, is_chat).await
+    }
+
+    /// Create and call llm by supplying data and common parameters
+    async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut contents = Vec::new();
 
         if !system.is_empty() {
@@ -116,7 +124,7 @@ impl LlmCompletion for GeminiCompletion {
             generation_config: GenerationConfig::new(Some(temperature), None, None, 1, Some(8192), None)
         };
 
-        call_gemini_completion(&completion).await
+        call_gemini_completion_model(Some(model), &completion).await
     }
 }
 
@@ -573,13 +581,27 @@ pub async fn call_gemini_system_all(system: Option<&str>, contents: Vec<Content>
     // Create chat completion
     let gemini_completion = GeminiCompletion::new(contents, safety, config);
 
-    call_gemini_completion(&gemini_completion).await
+    call_gemini_completion_model(None, &gemini_completion).await
 }
 
 /// Pass a pre-assembled completion object 
 pub async fn call_gemini_completion(gemini_completion: &GeminiCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    call_gemini_completion_model(None, gemini_completion).await
+}
+
+/// Pass a pre-assembled completion object 
+pub async fn call_gemini_completion_model(model: Option<&str>, gemini_completion: &GeminiCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
-    let url: String = Template::new("${GEMINI_URL}").render_env();
+    let mut env = HashMap::new();
+    match model {
+        None => if let Ok(gemini_model) = std::env::var("GEMINI_MODEL") {
+                    env.insert("GEMINI_MODEL", gemini_model);
+                },
+        Some(model) => {
+            env.insert("GEMINI_MODEL", model.into());
+        },
+    }
+    let url: String = Template::new("${GEMINI_URL}").render(&env);
     let client = get_gemini_client().await?;
 
     // Extract Response
@@ -747,6 +769,13 @@ mod tests {
         messages.push("Is a cuttle fish similar?".to_string());
 
         let res = GeminiCompletion::call(&system, &messages, 0.2, false, true).await;
+        println!("{res:?}");
+    }
+    #[tokio::test]
+    async fn test_call_gemini_dialogue_model() {
+        let model: String = std::env::var("GEMINI_MODEL").expect("GEMINI_MODEL not found in enviroment variables");
+        let messages = vec!["Hello".to_string()];
+        let res = GeminiCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
     }
 }
