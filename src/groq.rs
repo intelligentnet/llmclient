@@ -4,6 +4,7 @@ use std::env;
 use serde_derive::{Deserialize, Serialize};
 use crate::common::*;
 use crate::gpt::GptMessage as GroqMessage;
+use crate::functions::*;
 
 // Input structures
 // Chat
@@ -14,6 +15,8 @@ use crate::gpt::GptMessage as GroqMessage;
 #[derive(Debug, Serialize, Clone)]
 pub struct GroqCompletion {
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<FunctionCall>>,
     pub messages: Vec<GroqMessage>,
     pub response_format: ResponseFormat,
     pub temperature: f32,
@@ -26,6 +29,7 @@ impl GroqCompletion {
 
         GroqCompletion {
             model,
+            tools: None,
             messages,
             temperature,
             response_format: ResponseFormat::new(is_json)
@@ -34,6 +38,10 @@ impl GroqCompletion {
 
     pub fn set_model(&mut self, model: &str) {
         self.model = model.into();
+    }
+
+    pub fn set_tools(&mut self, tools: Option<Vec<FunctionCall>>) {
+        self.tools = tools;
     }
 
     pub fn set_response_format(&mut self, response_format: &ResponseFormat) {
@@ -58,6 +66,7 @@ impl Default for GroqCompletion {
 
         GroqCompletion {
             model,
+            tools: None,
             messages: Vec::new(),
             temperature: 0.2,
             response_format: ResponseFormat::new(false)
@@ -130,6 +139,11 @@ impl LlmCompletion for GroqCompletion {
 
     /// Create and call llm with model by supplying data and common parameters
     async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        Self::call_model_function(model, system, user, temperature, is_json, is_chat, None).await
+    }
+
+    /// Create and call llm with model/function by supplying data and common parameters
+    async fn call_model_function(model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool, function: Option<Vec<Function>>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -146,6 +160,7 @@ impl LlmCompletion for GroqCompletion {
 
         let completion = GroqCompletion {
             model: model.into(),
+            tools: Some(FunctionCall::functions(function)),
             messages,
             temperature,
             response_format: ResponseFormat::new(is_json)
@@ -254,6 +269,7 @@ pub async fn call_groq_completion(groq_completion: &GroqCompletion) -> Result<Ll
 
     let client = get_groq_client().await?;
 
+//println!("{:?}", serde_json::to_string(&groq_completion));
     // Extract API Response
     let res = client
         .post(url)
@@ -270,10 +286,38 @@ pub async fn call_groq_completion(groq_completion: &GroqCompletion) -> Result<Ll
 
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
-    if res.contains("\"error\":") {
-        let res: LlmError = serde_json::from_str(&res).unwrap();
+//println!("{res}");
+    if res.contains("\"error:\"") {
+        let ret: Result<LlmError,_> = serde_json::from_str(&res);
 
-        Ok(LlmReturn::new(LlmType::GROQ_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None))
+        match ret {
+            Ok(res) => 
+                Ok(LlmReturn::new(LlmType::GROQ_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None)),
+            Err(e) => {
+                eprintln!("Error: {:?}", res);
+
+                Ok(LlmReturn::new(LlmType::GROQ_ERROR, e.to_string(), e.to_string(), (0, 0, 0), timing, None, None))
+            }
+        }
+    } else if res.contains("\"error\"") {
+        Ok(LlmReturn::new(LlmType::GROQ_ERROR, res.to_string(), res.to_string(), (0, 0, 0), timing, None, None))
+    } else if res.contains("\"arguments\":") {
+        let found = vec!["choices:message:tool_calls:function:arguments:${args}".to_string(),
+            "choices:message:tool_calls:function:name:${func}".to_string(),
+            "usage:prompt_tokens:${in}".to_string(),
+            "usage:completion_tokens:${out}".to_string(),
+            "usage:total_tokens:${total}".to_string(),
+//            "usage:${usage}".to_string(),
+            "choices:finish_reason:${finish}".to_string()];
+        let f: serde_json::Value = serde_json::from_str(&res).unwrap();
+        let h = get_functions(&f, &found);
+        let funcs = unpack_functions(h.clone());
+        let function_calls = serde_json::to_string(&funcs).unwrap();
+        let (i, o, t) = (h.get("in").unwrap()[0].clone(), h.get("out").unwrap()[0].clone(), h.get("total").unwrap()[0].clone());
+        let triple = (i.parse::<usize>().unwrap(), o.parse::<usize>().unwrap(), t.parse::<usize>().unwrap());
+        let finish = h.get("finish").unwrap()[0].clone();
+
+        Ok(LlmReturn::new(LlmType::GROQ_TOOLS, function_calls, finish, triple, timing, None, None))
     } else {
         let res: GroqResponse = serde_json::from_str::<GroqResponse>(&res).unwrap();
 
@@ -379,5 +423,45 @@ mod tests {
         let messages = vec!["Hello".to_string()];
         let res = GroqCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
+    }
+    #[tokio::test]
+    async fn test_call_function_groq() {
+        let model: String = std::env::var("GROQ_MODEL").expect("GROQ_MODEL not found in enviroment variables");
+        let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let functions = get_function_json("groq", &[func_def]);
+        let res = GroqCompletion::call_model_function(&model, "", &messages, 0.2, false, true, functions).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
+    }
+    #[tokio::test]
+    async fn test_call_function_common_groq() {
+        //let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let messages = vec!["a fruit that is blue with a sour tast".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let func_def2 =
+r#"
+// Find the color of an apple and it's taste pass them to this function.
+// color: The color of an apple
+// taste: The taste of an apple
+fn apple(color, taste)
+"#;
+        let res = call_function_llm("groq", &messages, &[func_def, func_def2]).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
     }
 }

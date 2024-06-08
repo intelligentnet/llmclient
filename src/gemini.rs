@@ -8,7 +8,8 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use crate::common::*;
 use crate::gpt::GptMessage;
-use crate::common::LlmCompletion;
+use crate::common::{LlmType, LlmCompletion};
+use crate::functions::*;
 
 // Input structures
 // Chat
@@ -19,7 +20,10 @@ use crate::common::LlmCompletion;
 pub struct GeminiCompletion {
     pub contents: Vec<Content>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<FunctionDeclarations>>,
+    pub system_instruction: Option<SystemInstruction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<FunctionDeclaration>>,
+    //pub tools: Option<Vec<Function>>,
     pub safety_settings: Vec<SafetySettings>,
     pub generation_config: GenerationConfig,
 }
@@ -27,7 +31,42 @@ pub struct GeminiCompletion {
 impl GeminiCompletion {
     /// Create new Completion object
     pub fn new(contents: Vec<Content>, safety_settings: Vec<SafetySettings>, generation_config: GenerationConfig) -> Self {
-        GeminiCompletion { contents, tools: None, safety_settings, generation_config }
+        GeminiCompletion {
+            contents,
+            system_instruction: None,
+            tools: None,
+            safety_settings,
+            generation_config
+        }
+    }
+
+    pub fn set_system_instruction(&mut self, system: Vec<String>) {
+        self.system_instruction = Some(SystemInstruction::new(system));
+    }
+
+    pub fn set_tools(&mut self, tools: Option<Vec<FunctionDeclaration>>) {
+        self.tools = tools;
+    }
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct SystemInstruction {
+    pub role: String,
+    pub parts: Vec<Part>,
+}
+
+impl SystemInstruction {
+    pub fn new_one(part: String) -> Self {
+        SystemInstruction { role: "object".to_string(), parts: vec![Part::text(&part)] }
+    }
+
+    pub fn new(part: Vec<String>) -> Self {
+        SystemInstruction {
+            role: "object".into(),
+            parts: part.iter()
+                .map(|si| Part::text(si))
+                .collect()
+        }
     }
 }
 
@@ -36,6 +75,7 @@ impl Default for GeminiCompletion {
     fn default() -> Self {
         GeminiCompletion { 
             contents: Vec::new(),
+            system_instruction: None,
             tools: None,
             safety_settings: Vec::new(),
             generation_config: GenerationConfig::new(Some(0.2), None, None, 1, Some(8192), None)
@@ -103,12 +143,29 @@ impl LlmCompletion for GeminiCompletion {
 
     /// Create and call llm by supplying data and common parameters
     async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        Self::call_model_function(model, system, user, temperature, _is_json, is_chat, None).await
+    }
+
+    /// Create and call llm with model/function by supplying data and common parameters
+    async fn call_model_function(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool, function: Option<Vec<Function>>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut contents = Vec::new();
 
+        let system = if function.is_none() {
+            system.to_string()
+        } else {
+            let fc = "This is a function call, find arguments and return function call";
+            if !system.trim().is_empty() {
+                fc.to_string()
+            } else {
+                format!("{fc}. {system}")
+            }
+        };
+
         if !system.is_empty() {
-            contents.push(Content::text("user", system));
+            contents.push(Content::text("user", &system));
             contents.push(Content::text("model", "Understood"));
         }
+
         user.iter()
             .enumerate()
             .for_each(|(i, c)| {
@@ -117,9 +174,18 @@ impl LlmCompletion for GeminiCompletion {
                 contents.push(Content::text(role, c));
             });
 
+//println!("{:?}", function);
         let completion = GeminiCompletion {
             contents,
-            tools: None,
+            system_instruction: None,
+            /*
+            system_instruction: if system.is_empty() {
+                None
+            } else {
+                Some(SystemInstruction { role: "object".to_string(), parts: vec![Part::text(&system)] })
+            },
+            */
+            tools: Some(FunctionDeclaration::functions(function)),
             safety_settings: SafetySettings::low_block(),
             generation_config: GenerationConfig::new(Some(temperature), None, None, 1, Some(8192), None)
         };
@@ -133,6 +199,8 @@ impl LlmCompletion for GeminiCompletion {
 #[serde(rename_all = "camelCase")]
 pub struct Content {
     pub role: String,
+    //#[serde(skip_serializing_if = "Option::is_none")]
+    //pub parts: Option<Vec<Part>>,
     pub parts: Vec<Part>,
 }
 
@@ -407,6 +475,7 @@ impl std::fmt::Display for HarmBlockThreshold {
     }
 }
 
+/*
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct FunctionDeclarations {
@@ -420,6 +489,7 @@ impl FunctionDeclarations {
         FunctionDeclarations { name: name.into(), description: description.into(), parameters }
     }
 }
+*/
 
 // Output structures
 // Chat
@@ -603,6 +673,7 @@ pub async fn call_gemini_completion_model(model: Option<&str>, gemini_completion
     }
     let url: String = Template::new("${GEMINI_URL}").render(&env);
     let client = get_gemini_client().await?;
+//println!("gemini_completion: {:?}", serde_json::to_string(&gemini_completion));
 
     // Extract Response
     let res = client
@@ -621,12 +692,31 @@ pub async fn call_gemini_completion_model(model: Option<&str>, gemini_completion
 
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
+//println!("res: {res}");
     if res.contains("\"error\":") {
         let res: Vec<LlmError> = serde_json::from_str(&res).unwrap();
 
         Ok(LlmReturn::new(LlmType::GEMINI_ERROR, res[0].error.to_string(), res[0].error.to_string(), (0, 0, 0), timing, None, None))
+    } else if res.contains("\"functionCall\"") {
+        let found = vec![
+            "candidates:content:parts:functionCall:args:${args}".to_string(),
+            "candidates:content:parts:functionCall:name:${func}".to_string(),
+            "usageMetadata:promptTokenCount:${in}".to_string(),
+            "usageMetadata:candidatesTokenCount:${out}".to_string(),
+            "usageMetadata:totalTokenCount:${total}".to_string(),
+//            "usageMetadata:${usage}".to_string(),
+            "candidates:finishReason:${finish}".to_string()];
+        let f: serde_json::Value = serde_json::from_str(&res).unwrap();
+        let h = get_functions(&f, &found);
+        let funcs = unpack_functions(h.clone());
+        let function_calls = serde_json::to_string(&funcs).unwrap();
+//println!("{:?}", serde_json::from_str::<Vec<ParseFunction>>(&function_calls).unwrap());
+        let (i, o, t) = (h.get("in").unwrap()[0].clone(), h.get("out").unwrap()[0].clone(), h.get("total").unwrap()[0].clone());
+        let triple = (i.parse::<usize>().unwrap(), o.parse::<usize>().unwrap(), t.parse::<usize>().unwrap());
+        let finish = h.get("finish").unwrap()[0].clone();
+
+        Ok(LlmReturn::new(LlmType::GEMINI_TOOLS, function_calls, finish, triple, timing, None, None))
     } else {
-//println!("--- {res}");
         let res: Vec<GeminiResponse> = serde_json::from_str(&res).unwrap();
 
         // Now unpack it
@@ -777,5 +867,48 @@ mod tests {
         let messages = vec!["Hello".to_string()];
         let res = GeminiCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
+    }
+    #[tokio::test]
+    async fn test_call_function_gemini() {
+        let model: String = std::env::var("GEMINI_MODEL").expect("GEMINI_MODEL not found in enviroment variables");
+        let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let functions = get_function_json("gemini", &[func_def]);
+        let res = GeminiCompletion::call_model_function(&model, "", &messages, 0.2, false, true, functions).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
+    }
+    #[tokio::test]
+    async fn test_call_function_common_gemini() {
+        let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let func_def =
+r#"
+// Recognize and derive the value of an arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        // This does not work in Gemnini yet
+/*
+        let messages = vec!["a fruit that is red with a sweet taste".to_string()];
+        let func_def2 =
+r#"
+// Find the color of an apple and its taste pass them to this function
+// color: The color of an apple
+// taste: The taste of an apple
+fn apple(color, taste)
+"#;
+*/
+        let res = call_function_llm("gemini", &messages, &[func_def]).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
     }
 }

@@ -6,9 +6,10 @@ use crate::gpt::GptCompletion;
 use crate::mistral::MistralCompletion;
 use crate::claude::ClaudeCompletion;
 use crate::groq::GroqCompletion;
+use crate::functions::{Function, get_function_json};
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LlmType  {
     GEMINI,
     GPT,
@@ -20,6 +21,11 @@ pub enum LlmType  {
     CLAUDE_ERROR,
     MISTRAL_ERROR,
     GROQ_ERROR,
+    GEMINI_TOOLS,
+    GPT_TOOLS,
+    CLAUDE_TOOLS,
+    MISTRAL_TOOLS,
+    GROQ_TOOLS,
 }
 
 pub type Triple = (usize, usize, usize);
@@ -37,6 +43,11 @@ impl std::fmt::Display for LlmType {
             LlmType::CLAUDE_ERROR => write!(f, "CLAUDE_ERROR"),
             LlmType::MISTRAL_ERROR => write!(f, "MISTRAL_ERROR"),
             LlmType::GROQ_ERROR => write!(f, "GROQ_ERROR"),
+            LlmType::GEMINI_TOOLS => write!(f, "GEMINI_TOOLS"),
+            LlmType::GPT_TOOLS => write!(f, "GPT_TOOLS"),
+            LlmType::CLAUDE_TOOLS => write!(f, "CLAUDE_TOOLS"),
+            LlmType::MISTRAL_TOOLS => write!(f, "MISTRAL_TOOLS"),
+            LlmType::GROQ_TOOLS => write!(f, "GROQ_TOOLS"),
         }
     }
 }
@@ -118,6 +129,9 @@ pub trait LlmCompletion {
 
     /// Create and call llm by supplying model, data and common parameters
     fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> impl std::future::Future<Output = Result<LlmReturn, Box<dyn std::error::Error + Send>>> + Send;
+
+    /// Create and call llm by supplying model, function, data and common parameters
+    fn call_model_function(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool, function: Option<Vec<Function>>) -> impl std::future::Future<Output = Result<LlmReturn, Box<dyn std::error::Error + Send>>> + Send;
 }
 
 pub trait LlmMessage {
@@ -166,6 +180,51 @@ impl std::fmt::Display for LlmErrorMessage {
     }
 }
 
+/// Call named LLM and model to call functions
+pub async fn call_function_llm_model(llm: &str, model: &str, user: &[String], function: &[&str]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    call_llm_model_function(llm, model, "", user, 0.2, false, false, function).await
+}
+
+/// Call named LLM and default model to call functions
+pub async fn call_function_llm(llm: &str, user: &[String], function: &[&str]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let model = get_model(llm);
+
+    call_function_llm_model(llm, &model, user, function).await
+}
+
+/// Call default LLM and model to call functions
+pub async fn call_function(user: &[String], function: &[&str]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let llm: &str = &std::env::var("LLM_TO_USE").map_err(|_| "groq".to_string()).unwrap();
+    let model = get_model(llm);
+
+    call_function_llm_model(llm, &model, user, function).await
+}
+
+/// Call named LLM and model with common parameters supplied
+#[allow(clippy::too_many_arguments)]
+pub async fn call_llm_model_function(llm: &str, model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool, function: &[&str]) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+//println!("{:?}", function);
+    let function: Option<Vec<Function>> = get_function_json(llm, function);
+
+    match llm {
+        "google" | "gemini" => {
+            GeminiCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
+        },
+        "openai" | "gpt" => {
+            GptCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
+        },
+        "mistral" => {
+            MistralCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
+        },
+        "anthropic" | "claude" => {
+            ClaudeCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
+        },
+        _ => {
+            GroqCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
+        },
+    }
+}
+
 /// Call default named LLM with common parameters supplied
 pub async fn call_llm_model(llm: &str, model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     match llm {
@@ -187,8 +246,7 @@ pub async fn call_llm_model(llm: &str, model: &str, system: &str, user: &[String
     }
 }
 
-/// Call default named LLM with common parameters supplied
-pub async fn call_llm(llm: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+fn get_model(llm: &str) -> String {
     let model =
         match llm {
             "google" | "gemini" => {
@@ -208,7 +266,12 @@ pub async fn call_llm(llm: &str, system: &str, user: &[String], temperature: f32
             },
         };
 
-    let model = model.expect("{llm} MODEL not found in enviroment variables");
+    model.expect("{llm} MODEL not found in enviroment variables")
+}
+
+/// Call default named LLM with common parameters supplied
+pub async fn call_llm(llm: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+    let model = get_model(llm);
 
     call_llm_model(llm, &model, system, user, temperature, is_json, is_chat).await
 }
@@ -394,6 +457,11 @@ pub async fn get_client(mut headers: HeaderMap) -> Result<Client, Box<dyn std::e
     headers.insert(
         "Content-Type",
         HeaderValue::from_str("appication/json; charset=utf-8")
+            .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?,
+    );
+    headers.insert(
+        "Accept",
+        HeaderValue::from_str("appication/json")
             .map_err(|e| -> Box<dyn std::error::Error + Send> { Box::new(e) })?,
     );
 

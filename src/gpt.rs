@@ -3,6 +3,7 @@ use reqwest::Client;
 use std::env;
 use serde_derive::{Deserialize, Serialize};
 use crate::common::*;
+use crate::functions::*;
 
 // Input structures
 // Chat
@@ -12,7 +13,7 @@ use crate::common::*;
 pub struct GptCompletion {
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<String>,
+    pub tools: Option<Vec<FunctionCall>>,
     pub messages: Vec<GptMessage>,
     pub response_format: ResponseFormat,
     pub temperature: f32,
@@ -36,8 +37,8 @@ impl GptCompletion {
         self.model = model.into();
     }
 
-    pub fn set_tools(&mut self, tools: &str) {
-        self.tools = Some(tools.into());
+    pub fn set_tools(&mut self, tools: Option<Vec<FunctionCall>>) {
+        self.tools = tools;
     }
 
     pub fn set_response_format(&mut self, response_format: &ResponseFormat) {
@@ -142,6 +143,11 @@ impl LlmCompletion for GptCompletion {
  
     /// Create and call llm with model by supplying data and common parameters
     async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        Self::call_model_function(model, system, user, temperature, is_json, is_chat, None).await
+    }
+
+    /// Create and call llm with model/function by supplying data and common parameters
+   async fn call_model_function(model: &str, system: &str, user: &[String], temperature: f32, is_json: bool, is_chat: bool, function: Option<Vec<Function>>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -156,13 +162,15 @@ impl LlmCompletion for GptCompletion {
                 messages.push(GptMessage { role: role.into(), content: c.to_string() });
             });
 
+//println!("{:?}", function);
         let completion = GptCompletion {
             model: model.into(),
-            tools: None,
+            tools: Some(FunctionCall::functions(function)),
             messages,
             temperature,
             response_format: ResponseFormat::new(is_json)
         };
+//println!("-- {:?}", serde_json::to_string(&completion));
 
         call_gpt_completion(&completion).await
     }
@@ -329,7 +337,7 @@ pub async fn call_gpt_all(messages: Vec<GptMessage>, temperature: f32, is_json: 
     call_gpt_completion(&gpt_completion).await
 }
 
-/// Call Claude with pre-assembled completion
+/// Call GPT with pre-assembled completion
 pub async fn call_gpt_completion(gpt_completion: &GptCompletion) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
     let start = std::time::Instant::now();
     // Confirm endpoint
@@ -337,6 +345,7 @@ pub async fn call_gpt_completion(gpt_completion: &GptCompletion) -> Result<LlmRe
 
     let client = get_gpt_client().await?;
 
+//println!("completion: {:?}", gpt_completion);
     // Extract API Response
     let res = client
         .post(url)
@@ -353,12 +362,41 @@ pub async fn call_gpt_completion(gpt_completion: &GptCompletion) -> Result<LlmRe
 
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
-    if res.contains("\"error\":") {
-        let res: LlmError = serde_json::from_str(&res).unwrap();
+    if res.contains("\"error:\"") {
+        let ret: Result<LlmError,_> = serde_json::from_str(&res);
 
-        Ok(LlmReturn::new(LlmType::GPT_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None))
+        match ret {
+            Ok(res) => 
+                Ok(LlmReturn::new(LlmType::GPT_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None)),
+            Err(e) => {
+                eprintln!("Error: {:?}", res);
+
+                Ok(LlmReturn::new(LlmType::GPT_ERROR, e.to_string(), e.to_string(), (0, 0, 0), timing, None, None))
+            }
+        }
+    } else if res.contains("\"error\"") {
+        Ok(LlmReturn::new(LlmType::GPT_ERROR, res.to_string(), res.to_string(), (0, 0, 0), timing, None, None))
+    } else if res.contains("\"arguments\":") {
+//println!("res: {res:?}");
+        let found = vec!["choices:message:tool_calls:function:arguments:${args}".to_string(),
+            "choices:message:tool_calls:function:name:${func}".to_string(),
+            "usage:prompt_tokens:${in}".to_string(),
+            "usage:completion_tokens:${out}".to_string(),
+            "usage:total_tokens:${total}".to_string(),
+//            "usage:${usage}".to_string(),
+            "choices:finish_reason:${finish}".to_string()];
+        let f: serde_json::Value = serde_json::from_str(&res).unwrap();
+        let h = get_functions(&f, &found);
+        let funcs = unpack_functions(h.clone());
+        let function_calls = serde_json::to_string(&funcs).unwrap();
+        let (i, o, t) = (h.get("in").unwrap()[0].clone(), h.get("out").unwrap()[0].clone(), h.get("total").unwrap()[0].clone());
+        let triple = (i.parse::<usize>().unwrap(), o.parse::<usize>().unwrap(), t.parse::<usize>().unwrap());
+        let finish = h.get("finish").unwrap()[0].clone();
+
+        Ok(LlmReturn::new(LlmType::GPT_TOOLS, function_calls, finish, triple, timing, None, None))
     } else {
-        let res: GptResponse = serde_json::from_str::<GptResponse>(&res).unwrap();
+        // Todo: no unwrap
+        let res = serde_json::from_str::<GptResponse>(&res).unwrap();
 
         // Send Response
         let text: String =
@@ -463,5 +501,44 @@ mod tests {
         let res = GptCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
     }
+    #[tokio::test]
+    async fn test_call_function_gpt() {
+        let model: String = std::env::var("GPT_MODEL").expect("GPT_MODEL not found in enviroment variables");
+        let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let functions = get_function_json("gpt", &[func_def]);
+        let res = GptCompletion::call_model_function(&model, "", &messages, 0.2, false, true, functions).await;
+        println!("{res:?}");
 
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
+    }
+    #[tokio::test]
+    async fn test_call_function_common_gpt() {
+        //let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let messages = vec!["a fruit that is red with a sweet tast".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let func_def2 =
+r#"
+// Find the color of an apple and its taste pass them to this function
+// color: The color of an apple
+// taste: The taste of an apple
+fn apple(color, taste)
+"#;
+        let res = call_function_llm("gpt", &messages, &[func_def, func_def2]).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
+    }
 }

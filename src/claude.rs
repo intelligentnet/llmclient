@@ -4,12 +4,15 @@ use std::env;
 use serde_derive::{Deserialize, Serialize};
 use crate::common::*;
 use crate::gpt::GptMessage as ClaudeMessage;
+use crate::functions::*;
 
 // Input structures
 // Chat
 #[derive(Debug, Serialize, Clone)]
 pub struct ClaudeCompletion {
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<Function>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<String>,
     pub messages: Vec<ClaudeMessage>,
@@ -27,6 +30,7 @@ impl ClaudeCompletion {
 
         ClaudeCompletion {
             model,
+            tools: None,
             system: None,
             messages,
             temperature,
@@ -37,6 +41,10 @@ impl ClaudeCompletion {
 
     pub fn set_model(&mut self, model: &str) {
         self.model = model.into();
+    }
+
+    pub fn set_tools(&mut self, tools: Option<Vec<Function>>) {
+        self.tools = tools;
     }
 
     pub fn set_max_tokens(&mut self, max_tokens: usize) {
@@ -61,6 +69,7 @@ impl Default for ClaudeCompletion {
 
         ClaudeCompletion {
             model,
+            tools: None,
             system: None,
             messages: Vec::new(),
             temperature: 0.2,
@@ -124,6 +133,11 @@ impl LlmCompletion for ClaudeCompletion {
 
     /// Create and call llm by supplying data and common parameters
     async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        Self::call_model_function(model, system, user, temperature, _is_json, is_chat, None).await
+    }
+
+    /// Create and call llm with model/function by supplying data and common parameters
+    async fn call_model_function(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool, function: Option<Vec<Function>>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         user.iter()
@@ -136,6 +150,7 @@ impl LlmCompletion for ClaudeCompletion {
 
         let completion = ClaudeCompletion {
             model: model.into(),
+            tools: function,
             system: if system.is_empty() { None } else { Some(system.to_string()) },
             messages,
             temperature,
@@ -219,6 +234,7 @@ pub async fn call_claude_all(messages: Vec<ClaudeMessage>, temperature: f32, max
     // Create chat completion
     let claude_completion: ClaudeCompletion = ClaudeCompletion {
         model,
+        tools: None,
         system: if smess.is_empty() { None } else { Some(smess) },
         messages: vec![ClaudeMessage { role: "user".into(), content: umess }],
         temperature,
@@ -235,6 +251,7 @@ pub async fn call_claude_completion(claude_completion: &ClaudeCompletion) -> Res
     let url: String =
         env::var("CLAUDE_URL").expect("CLAUDE_URL not found in environment variables");
 
+//println!("{:?}", claude_completion);
     let client = get_claude_client().await?;
 
     // Extract API Response
@@ -253,10 +270,39 @@ pub async fn call_claude_completion(claude_completion: &ClaudeCompletion) -> Res
      
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
-    if res.contains("\"error\":") {
-        let res: LlmError = serde_json::from_str(&res).unwrap();
+//println!("{res}");
+    if res.contains("\"error:\"") {
+        let ret: Result<LlmError,_> = serde_json::from_str(&res);
 
-        Ok(LlmReturn::new(LlmType::CLAUDE_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None))
+        match ret {
+            Ok(res) => 
+                Ok(LlmReturn::new(LlmType::CLAUDE_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None)),
+            Err(e) => {
+                eprintln!("Error: {:?}", res);
+
+                Ok(LlmReturn::new(LlmType::CLAUDE_ERROR, e.to_string(), e.to_string(), (0, 0, 0), timing, None, None))
+            }
+        }
+    } else if res.contains("\"error\"") {
+        Ok(LlmReturn::new(LlmType::CLAUDE_ERROR, res.to_string(), res.to_string(), (0, 0, 0), timing, None, None))
+    } else if res.contains("\"tool_use\"") {
+        let found = vec!["content:input:${args}".to_string(),
+            "content:name:${func}".to_string(),
+            "usage:input_tokens:${in}".to_string(),
+            "usage:output_tokens:${out}".to_string(),
+//            "usage:${usage}".to_string(),
+            "stop_reason:${finish}".to_string()];
+        let f: serde_json::Value = serde_json::from_str(&res).unwrap();
+        let h = get_functions(&f, &found);
+        let funcs = unpack_functions(h.clone());
+        let function_calls = serde_json::to_string(&funcs).unwrap();
+        let (i, o) = (h.get("in").unwrap()[0].clone(), h.get("out").unwrap()[0].clone());
+        let ip = i.parse::<usize>().unwrap();
+        let op = o.parse::<usize>().unwrap();
+        let triple = (ip, op, ip + op);
+        let finish = h.get("finish").unwrap()[0].clone();
+
+        Ok(LlmReturn::new(LlmType::CLAUDE_TOOLS, function_calls, finish, triple, timing, None, None))
     } else {
         let res: ClaudeResponse = serde_json::from_str::<ClaudeResponse>(&res).unwrap();
 
@@ -355,7 +401,7 @@ mod tests {
         claude(messages).await;
     }
     #[tokio::test]
-    //#[serial]
+    #[serial]
     async fn test_call_claude_logic() {
         let messages = 
             vec![ClaudeMessage::text("user", "How many brains does an octopus have, when they have been injured and lost a leg?")];
@@ -377,10 +423,56 @@ mod tests {
         println!("{res:?}");
     }
     #[tokio::test]
+    #[serial]
     async fn test_call_claude_dialogue_model() {
         let model: String = std::env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
         let messages = vec!["Hello".to_string()];
         let res = ClaudeCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
+    }
+    #[tokio::test]
+    #[serial]
+    async fn test_call_function_claude() {
+        let model: String = std::env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables");
+        let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let functions = get_function_json("claude", &[func_def]);
+        let res = ClaudeCompletion::call_model_function(&model, "", &messages, 0.2, false, true, functions).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
+    }
+    #[tokio::test]
+    #[serial]
+    async fn test_call_function_common_claude() {
+        let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        //let messages = vec!["a fruit that is red with a sweet taste".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        // This does not work in Claude yet
+/*
+        let func_def2 =
+r#"
+// Find the color of an apple and its taste pass them to this function
+// color: The color of an apple
+// taste: The taste of an apple
+fn apple(color, taste)
+"#;
+*/
+        let res = call_function_llm("claude", &messages, &[func_def]).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
     }
 }

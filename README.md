@@ -7,7 +7,26 @@ LATEST:
 
 0.2.1	Addition interface functions to supply model as parameter.
 
-Next, apart from any refactoring, will be a web interface, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). What is the demand?
+0.3.0	'Function' Calling. See Notes!
+
+Note on Function Calling: This has now been implemented and works the majority of the time. There is a lot of variation in the JSON responses returned, so this is a best efforts attempt to generically get function calling responses. As usual Gemini is the most complex and will sometimes return a function calling result but occasionally will get 'clever' and returns a normal textual response, such as "That's correct. There are 525,600 minutes in a year. Is there anything else I can help you with?", rather than a tool response containing data for a subsequent function call (in this case to a calculator function given : (60 * 24) * 365.25). System Instructions in Gemini do not currently work with function calls, so the old method of forging a system prompt with dialogue is continued. Also, Gemini and Claude can only handle one function call at a time! Function calling quality should be considered at best provisional.
+
+To define a function use the following format :
+
+`
+// Full descripton of function being called
+// <arg1>: Full description of first argument
+...
+// <argn>: Full description of n-th argument
+fn <function name>(<arg1>, ... <argn>)
+
+All arguments are strings and the return value is a string.
+`
+
+One or more message(s) should also be supplied. This is data from which the LLM
+identifies the parameters for the call to the function. The function and argument descriptions above are very important for the LLM to correctly identify and extract the required data.
+
+Next, apart from any refactoring, will be a web interface with more statistics and associated huristics for load balancing, which may or may not be made available as a service. Wrapping in other languages (Python, Java and C/C++ being the obvious ones). Embedding and image generation can also be done, but are not currently supported by all LLM's. What is the demand?
 
 Introduction
 ------------
@@ -31,14 +50,12 @@ For you to do to get started (Google) :
 
 For other providers, follow API instructions which generally means obtaining a key.
 
-Testing this is tricky and there are many variations of possible responses (assuming Google have not changed their interface). Tests will pass providing a call is successfully made to Gemini and does not return a Error. There may be a number of internal reasons for it to fail (finish not 'STOP', safety resons etc). To show more context call test with the --nocapture flag.
+Testing this is tricky and there are many variations of possible responses (assuming api providers have not changed their interface). Tests will pass providing a call is successfully made to LLM and does not return a Error. There may be a number of internal reasons for it to fail (finish not 'STOP', safety resons etc). To show more context call test with the --nocapture flag.
 
 TODO
 ----
 
-- Better support for non-text searches
-- Add 'function calling'
-- If required add more helper functions to help unpack data from each vendor
+- Better support for non-text searches - Functions now available
 - Fix bugs that will inevitably come up as this interface matures
 - Keep up with Google and others
 

@@ -4,12 +4,15 @@ use std::env;
 use serde_derive::{Deserialize, Serialize};
 use crate::common::*;
 use crate::gpt::GptMessage as MistralMessage;
+use crate::functions::*;
 
 // Input structures
 // Chat
 #[derive(Debug, Serialize, Clone)]
 pub struct MistralCompletion {
     pub model: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<FunctionCall>>,
     pub messages: Vec<MistralMessage>,
     pub temperature: f32,
     //pub top_p: f32,
@@ -25,6 +28,7 @@ impl MistralCompletion {
 
         MistralCompletion {
             model,
+            tools: None,
             messages,
             temperature,
             max_tokens,
@@ -33,6 +37,10 @@ impl MistralCompletion {
 
     pub fn set_model(&mut self, model: &str) {
         self.model = model.into();
+    }
+
+    pub fn set_tools(&mut self, tools: Option<Vec<FunctionCall>>) {
+        self.tools = tools;
     }
 
     pub fn set_max_tokens(&mut self, max_tokens: usize) {
@@ -57,6 +65,7 @@ impl Default for MistralCompletion {
 
         MistralCompletion {
             model,
+            tools: None,
             messages: Vec::new(),
             temperature: 0.2,
             max_tokens: 4096
@@ -119,6 +128,11 @@ impl LlmCompletion for MistralCompletion {
 
     /// Create and call llm by supplying data and common parameters
     async fn call_model(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
+        Self::call_model_function(model, system, user, temperature, _is_json, is_chat, None).await
+    }
+
+    /// Create and call llm with model/function by supplying data and common parameters
+    async fn call_model_function(model: &str, system: &str, user: &[String], temperature: f32, _is_json: bool, is_chat: bool, function: Option<Vec<Function>>) -> Result<LlmReturn, Box<dyn std::error::Error + Send>> {
         let mut messages = Vec::new();
 
         if !system.is_empty() {
@@ -135,6 +149,7 @@ impl LlmCompletion for MistralCompletion {
 
         let completion = MistralCompletion {
             model: model.into(),
+            tools: Some(FunctionCall::functions(function)),
             messages,
             temperature,
             max_tokens: 4096
@@ -238,10 +253,38 @@ pub async fn call_mistral_completion(mistral_completion: &MistralCompletion) -> 
 
     let timing = start.elapsed().as_secs() as f64 + start.elapsed().subsec_millis() as f64 / 1000.0;
 
-    if res.contains("\"error\":") {
-        let res: LlmError = serde_json::from_str(&res).unwrap();
+//println!("{res:?}");
+    if res.contains("\"error:\"") {
+        let ret: Result<LlmError,_> = serde_json::from_str(&res);
 
-        Ok(LlmReturn::new(LlmType::MISTRAL_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None))
+        match ret {
+            Ok(res) => 
+                Ok(LlmReturn::new(LlmType::MISTRAL_ERROR, res.error.to_string(), res.error.to_string(), (0, 0, 0), timing, None, None)),
+            Err(e) => {
+                eprintln!("Error: {:?}", res);
+
+                Ok(LlmReturn::new(LlmType::MISTRAL_ERROR, e.to_string(), e.to_string(), (0, 0, 0), timing, None, None))
+            }
+        }
+    } else if res.contains("\"error\"") {
+        Ok(LlmReturn::new(LlmType::MISTRAL_ERROR, res.to_string(), res.to_string(), (0, 0, 0), timing, None, None))
+    } else if res.contains("\"arguments\":") {
+        let found = vec!["choices:message:tool_calls:function:arguments:${args}".to_string(),
+            "choices:message:tool_calls:function:name:${func}".to_string(),
+            "usage:prompt_tokens:${in}".to_string(),
+            "usage:completion_tokens:${out}".to_string(),
+            "usage:total_tokens:${total}".to_string(),
+//            "usage:${usage}".to_string(),
+            "choices:finish_reason:${finish}".to_string()];
+        let f: serde_json::Value = serde_json::from_str(&res).unwrap();
+        let h = get_functions(&f, &found);
+        let funcs = unpack_functions(h.clone());
+        let function_calls = serde_json::to_string(&funcs).unwrap();
+        let (i, o, t) = (h.get("in").unwrap()[0].clone(), h.get("out").unwrap()[0].clone(), h.get("total").unwrap()[0].clone());
+        let triple = (i.parse::<usize>().unwrap(), o.parse::<usize>().unwrap(), t.parse::<usize>().unwrap());
+        let finish = h.get("finish").unwrap()[0].clone();
+
+        Ok(LlmReturn::new(LlmType::MISTRAL_TOOLS, function_calls, finish, triple, timing, None, None))
     } else {
         let res: MistralResponse = serde_json::from_str::<MistralResponse>(&res).unwrap();
 
@@ -345,5 +388,45 @@ mod tests {
         let messages = vec!["Hello".to_string()];
         let res = MistralCompletion::call_model(&model, "", &messages, 0.2, false, true).await;
         println!("{res:?}");
+    }
+    #[tokio::test]
+    async fn test_call_function_mistral() {
+        let model: String = std::env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviroment variables");
+        let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let functions = get_function_json("mistral", &[func_def]);
+        let res = MistralCompletion::call_model_function(&model, "", &messages, 0.2, false, true, functions).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
+    }
+    #[tokio::test]
+    async fn test_call_function_common_mistral() {
+        //let messages =  vec!["The answer is (60 * 24) * 365.25".to_string()];
+        let messages = vec!["a fruit that is blue with a sour tast".to_string()];
+        let func_def =
+r#"
+// Derive the value of the arithmetic expression
+// expr: An arithmetic expression
+fn arithmetic(expr)
+"#;
+        let func_def2 =
+r#"
+// Find the color of an apple and it's taste pass them to this function.
+// color: The color of an apple
+// taste: The taste of an apple
+fn apple(color, taste)
+"#;
+        let res = call_function_llm("mistral", &messages, &[func_def, func_def2]).await;
+        println!("{res:?}");
+
+        let answer = call_actual_function(res.ok());
+        println!("{answer:?}");
     }
 }
