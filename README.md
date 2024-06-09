@@ -21,9 +21,8 @@ To define a function use the following format :
 ...
 // <argn>: Full description of n-th argument
 fn <function name>(<arg1>, ... <argn>)
-
-All arguments are strings and the return value is a string.
 ```
+All arguments are strings and the return value is a string.
 
 One or more message(s) should also be supplied. This is data from which the LLM
 identifies the parameters for the call to the function. The function and argument descriptions above are very important for the LLM to correctly identify and extract the required data.
