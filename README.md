@@ -8,8 +8,7 @@ LATEST:
 0.2.1	Addition interface functions to supply model as parameter.
 
 0.3.0	'Function' Calling. See Notes!
-
-Demo web site available: https://intelligent-net.ddns.net/ind
+ 
 
 Note on Function Calling: This has now been implemented and works the majority of the time. There is a lot of variation in the JSON responses returned, so this is a best efforts attempt to generically get function calling responses. As usual Gemini is the most complex and will sometimes return a function calling result but occasionally will get 'clever' and returns a normal textual response, such as "That's correct. There are 525,600 minutes in a year. Is there anything else I can help you with?", rather than a tool response containing data for a subsequent function call (in this case to a calculator function given : (60 * 24) * 365.25). System Instructions in Gemini do not currently work with function calls, so the old method of forging a system prompt with dialogue is continued. Also, Gemini and Claude can only handle one function call at a time! Function calling quality should be considered at best provisional.
 
