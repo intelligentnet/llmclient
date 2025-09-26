@@ -344,7 +344,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_call_mistral_basic() {
-        let messages: Vec<MistralMessage> = vec![MistralMessage { role: "user".into(), content: "What is the meaining of life?".into() }];
+        let messages: Vec<MistralMessage> = vec![MistralMessage { role: "user".into(), content: "What is the meaning of life?".into() }];
 
         mistral(messages).await;
     }

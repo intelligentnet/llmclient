@@ -459,7 +459,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_call_gpt_basic() {
-        let messages = vec![GptMessage::text("user", "What is the meaining of life?")];
+        let messages = vec![GptMessage::text("user", "What is the meaning of life?")];
         gpt(messages).await;
     }
     #[tokio::test]

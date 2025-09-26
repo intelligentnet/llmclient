@@ -36,7 +36,7 @@ impl ParseArgument {
     }
 }
 
-/// Wrapper used by GPT, Mistral and Groq
+/// Wrapper used by GPT, Mistral, Deepseek and Groq
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FunctionCall {
     pub r#type: String,
@@ -468,6 +468,7 @@ pub fn call_actual_function(res: Option<LlmReturn>) -> Vec<String> {
             LlmType::GPT_TOOLS |
             LlmType::CLAUDE_TOOLS |
             LlmType::MISTRAL_TOOLS |
+            LlmType::DEEPSEEK_TOOLS |
             LlmType::GROQ_TOOLS => 
                 call_my_functions(serde_json::from_str::<Vec<ParseFunction>>(&llm_return.text)),
             _ => vec!["LLM failed to treat query as a function call".to_string()]

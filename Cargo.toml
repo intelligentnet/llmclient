@@ -1,7 +1,7 @@
 [package]
 name = "llmclient"
-version = "0.3.0"
-edition = "2021"
+version = "0.3.1"
+edition = "2024"
 authors = ["Chris Dipple <chris@intelligent-net.co.uk>"]
 license = "MIT OR Apache-2.0"
 description = "Rust LLM client - Gemini, GPT, Claude, Mistral, Groq"
@@ -14,18 +14,18 @@ categories = ["web-programming::http-client", "api-bindings"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11", features = ["json", "gzip"] }
-tokio = { version = "1", features = ["full"] }
-serde = "^1.0.124"
+reqwest = { version = "^0.12", features = ["json", "gzip"] }
+tokio = { version = "^1", features = ["full"] }
+serde = "^1.0"
 serde_json = "^1.0"
 serde_derive = "^1"
 base64 = "0.21"
 stemplate = "0.1"
-crossterm = "0.27"
+crossterm = "0.29"
 futures = "0.3"
 regex = "1.10"
 peg = "^0.8"
-evalexpr = "11"
+evalexpr = "^12"
 
 [dev-dependencies]
 serial_test = "3.0.0"

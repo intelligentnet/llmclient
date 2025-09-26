@@ -382,7 +382,7 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_call_claude_basic() {
-        let messages: Vec<ClaudeMessage> = vec![ClaudeMessage { role: "user".into(), content: "What is the meaining of life?".into() }];
+        let messages: Vec<ClaudeMessage> = vec![ClaudeMessage { role: "user".into(), content: "What is the meaning of life?".into() }];
 
         claude(messages).await;
     }

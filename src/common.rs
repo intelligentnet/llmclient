@@ -5,6 +5,7 @@ use crate::gemini::GeminiCompletion;
 use crate::gpt::GptCompletion;
 use crate::mistral::MistralCompletion;
 use crate::claude::ClaudeCompletion;
+use crate::deepseek::DeepseekCompletion;
 use crate::groq::GroqCompletion;
 use crate::functions::{Function, get_function_json};
 
@@ -15,16 +16,19 @@ pub enum LlmType  {
     GPT,
     CLAUDE,
     MISTRAL,
+    DEEPSEEK,
     GROQ,
     GEMINI_ERROR,
     GPT_ERROR,
     CLAUDE_ERROR,
     MISTRAL_ERROR,
+    DEEPSEEK_ERROR,
     GROQ_ERROR,
     GEMINI_TOOLS,
     GPT_TOOLS,
     CLAUDE_TOOLS,
     MISTRAL_TOOLS,
+    DEEPSEEK_TOOLS,
     GROQ_TOOLS,
 }
 
@@ -37,16 +41,19 @@ impl std::fmt::Display for LlmType {
             LlmType::GPT => write!(f, "GPT"),
             LlmType::CLAUDE => write!(f, "CLAUDE"),
             LlmType::MISTRAL => write!(f, "MISTRAL"),
+            LlmType::DEEPSEEK => write!(f, "DEEPSEEK"),
             LlmType::GROQ => write!(f, "GROQ"),
             LlmType::GEMINI_ERROR => write!(f, "GEMINI_ERROR"),
             LlmType::GPT_ERROR => write!(f, "GPT_ERROR"),
             LlmType::CLAUDE_ERROR => write!(f, "CLAUDE_ERROR"),
             LlmType::MISTRAL_ERROR => write!(f, "MISTRAL_ERROR"),
+            LlmType::DEEPSEEK_ERROR => write!(f, "DEEPSEEK_ERROR"),
             LlmType::GROQ_ERROR => write!(f, "GROQ_ERROR"),
             LlmType::GEMINI_TOOLS => write!(f, "GEMINI_TOOLS"),
             LlmType::GPT_TOOLS => write!(f, "GPT_TOOLS"),
             LlmType::CLAUDE_TOOLS => write!(f, "CLAUDE_TOOLS"),
             LlmType::MISTRAL_TOOLS => write!(f, "MISTRAL_TOOLS"),
+            LlmType::DEEPSEEK_TOOLS => write!(f, "DEEPSEEK_TOOLS"),
             LlmType::GROQ_TOOLS => write!(f, "GROQ_TOOLS"),
         }
     }
@@ -219,6 +226,9 @@ pub async fn call_llm_model_function(llm: &str, model: &str, system: &str, user:
         "anthropic" | "claude" => {
             ClaudeCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
         },
+        "deepseek" => {
+            DeepseekCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
+        },
         _ => {
             GroqCompletion::call_model_function(model, system, user, temperature, is_json, is_chat, function).await
         },
@@ -239,6 +249,9 @@ pub async fn call_llm_model(llm: &str, model: &str, system: &str, user: &[String
         },
         "anthropic" | "claude" => {
             ClaudeCompletion::call_model(model, system, user, temperature, is_json, is_chat).await
+        },
+        "deepseek" => {
+            DeepseekCompletion::call_model(model, system, user, temperature, is_json, is_chat).await
         },
         _ => {
             GroqCompletion::call_model(model, system, user, temperature, is_json, is_chat).await

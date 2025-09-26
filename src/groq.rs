@@ -382,7 +382,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_call_groq_basic() {
-        let messages = vec![GroqMessage::text("user", "What is the meaining of life?")];
+        let messages = vec![GroqMessage::text("user", "What is the meaning of life?")];
         groq(messages).await;
     }
     #[tokio::test]

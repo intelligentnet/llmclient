@@ -8,23 +8,41 @@ use llmclient::common::call_llm_model;
 #[tokio::main]
 async fn main() {
     let mut llm = "4";
-    let mut model = "llama3-70b-8192";
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() <= 1 {
-        highlight("Please supply first argument to indicate the LLM to run : 0 = Gemini, 1 = GPT, Claude = 2, Mistral = 3, Groq = 4");
+        highlight("Please supply first argument to indicate the LLM to run : 0 = Gemini, 1 = GPT, Claude = 2, Mistral = 3, Deepseek = 4, Groq = 5");
         highlight(&format!("This run will default to {llm}\n"));
     } else {
         llm = &args[1];
     }
+
+    let mut model: String = 
+         match llm {
+            "0" | "gemini" =>
+                std::env::var("GEMINI_MODEL").expect("GEMINI_MODEL not found in enviroment variables"),
+            "1" | "gpt" | "openai" =>
+                std::env::var("GPT_MODEL").expect("GPT_MODEL not found in enviroment variables"),
+            "2" | "claude" =>
+                std::env::var("CLAUDE_MODEL").expect("CLAUDE_MODEL not found in enviroment variables"),
+            "3" | "mistral" =>
+                std::env::var("MISTRAL_MODEL").expect("MISTRAL_MODEL not found in enviroment variables"),
+            "4" | "deepseek" =>
+                std::env::var("DEEPSEEK_MODEL").expect("DEEPSEEK_MODEL not found in enviroment variables"),
+            "5" | "groq" =>
+                std::env::var("GROQ_MODEL").expect("GROQ_MODEL not found in enviroment variables"),
+            _ => std::env::var("GROQ_MODEL").expect("GROQ_MODEL not found in enviroment variables"),
+        };
 
     if args.len() <= 2 {
         highlight("Please supply argument to indicate the model to run");
         highlight(&format!("This run will default to {model}\n"));
         highlight("Please ensure model exists and is compatable with llm\n");
     } else {
-        model = &args[2];
+        model = args[2].clone();
     }
+
+    let model = &model;
 
     highlight(&format!("Running {llm}: {model}\n"));
     highlight("Type multiple lines and then end with ^D [or ^Z on Windows] for answer.");
@@ -87,13 +105,15 @@ async fn main() {
         let res = match llm {
             "0" | "gemini" =>
                 call_llm_model("gemini", model, &system, &prompts, 0.2, false, true).await,
-            "1" | "gpt" =>
+            "1" | "gpt" | "openai" =>
                 call_llm_model("gpt", model, &system, &prompts, 0.2, false, true).await,
             "2" | "claude" =>
                 call_llm_model("claude", model, &system, &prompts, 0.2, false, true).await,
             "3" | "mistral" =>
                 call_llm_model("mistral", model, &system, &prompts, 0.2, false, true).await,
-            "4" | "groq" =>
+            "4" | "deepseek" =>
+                call_llm_model("deepseek", model, &system, &prompts, 0.2, false, true).await,
+            "5" | "groq" =>
                 call_llm_model("groq", model, &system, &prompts, 0.2, false, true).await,
             _ => todo!()
         };
