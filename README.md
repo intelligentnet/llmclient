@@ -1,4 +1,4 @@
-LLM Rust Client for Google Gemini, OpenAI GPT, Anthropic Claude and Mistral
+LLM Rust Client for Google Gemini, OpenAI GPT, Anthropic Claude, Deepseek and Mistral
 
 LATEST:
 -------
@@ -9,7 +9,7 @@ LATEST:
 
 0.3.0	'Function' Calling. See Notes!
 
-0.3.1	Deepseek, fixes for Gemini changes, update libs
+0.3.2	Deepseek, fixes for Gemini changes, update libs
  
 Demo web site available: https://intelligent-net.ddns.net/ind
 This was not used so no longer available. Can be restored if needed!
